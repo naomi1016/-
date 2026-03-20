@@ -70,10 +70,7 @@ export function useNeuralSearch(books: Book[], query: string) {
 
   const setStatus = (s: ModelStatus) => { statusRef.current = s; setModelStatus(s); };
 
-  // 啟動時預載 embeddings JSON（背景靜默）
-  useEffect(() => { getEmbeddings().catch(() => {}); }, []);
-
-  // query 變更時，延遲觸發神經搜尋
+  // query 變更時，延遲觸發神經搜尋（embeddings 按需載入，不預先下載 25MB）
   useEffect(() => {
     const q = query.trim();
     if (!q) { setNeuralScores(new Map()); return; }
