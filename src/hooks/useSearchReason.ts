@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { Book } from '../types';
 
 // Vite 在 build 時將 process.env.GEMINI_API_KEY 替換為實際字串值
@@ -32,7 +32,8 @@ export function useSearchReason(query: string, topBooks: Book[]) {
 
     (async () => {
       try {
-        const ai = new GoogleGenAI({ apiKey: API_KEY });
+        const genAI = new GoogleGenerativeAI(API_KEY);
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
         const bookList = topBooks
           .slice(0, 5)
@@ -43,19 +44,16 @@ export function useSearchReason(query: string, topBooks: Book[]) {
           .join('\n');
 
         const prompt =
-          `使用者搜尋：「${q}」\n\n` +
+          `使用者搜尋：「${q}」（這是使用者描述自身情境或需求的句子，請從情感/需求面理解，不要從字面解讀詞語）\n\n` +
           `以下是搜尋到的書籍（前5本）：\n${bookList}\n\n` +
-          `請用一句話（35字以內）說明這些書為何符合使用者的搜尋意圖，` +
+          `請用一句話（35字以內）說明這些書為何能回應使用者的需求或情緒，` +
           `語氣自然親切，不要列舉書名，以「這幾本書」開頭。`;
 
-        const resp = await ai.models.generateContent({
-          model:    'gemini-2.0-flash',
-          contents: prompt,
-        });
+        const result = await model.generateContent(prompt);
 
         if (abortRef.current) return;
 
-        const text = resp.text?.trim() ?? '';
+        const text = result.response.text().trim();
         reasonCache.set(q, text);
         setReason(text);
       } catch {

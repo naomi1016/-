@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const API_KEY = process.env.GEMINI_API_KEY || '';
 const cache = new Map<string, string[]>();
@@ -88,21 +88,18 @@ export function useIntentSuggestions(input: string) {
 
     const timer = setTimeout(async () => {
       try {
-        const ai = new GoogleGenAI({ apiKey: API_KEY });
+        const genAI = new GoogleGenerativeAI(API_KEY);
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
         const prompt =
           `使用者正在輸入圖書搜尋關鍵字：「${q}」\n` +
           `請根據這個輸入，預測 4 個使用者可能想搜尋的完整意圖短句（繁體中文，10 字以內）。\n` +
           `這些短句應貼近讀者的真實閱讀需求，例如情緒、目標、人際、職場等情境。\n` +
           `只回傳 4 個短句，每行一個，不加編號、標點或任何說明。`;
 
-        const resp = await ai.models.generateContent({
-          model: 'gemini-2.0-flash',
-          contents: prompt,
-        });
-
+        const result = await model.generateContent(prompt);
         if (cancelled) return;
 
-        const items = (resp.text ?? '')
+        const items = (result.response.text() ?? '')
           .split('\n')
           .map(s => s.trim())
           .filter(s => s.length > 0)
@@ -112,7 +109,8 @@ export function useIntentSuggestions(input: string) {
         const final = items.length > 0 ? items : localSuggest(q);
         cache.set(q, final);
         setSuggestions(final);
-      } catch {
+      } catch (err) {
+        console.error('[useIntentSuggestions] Gemini error:', err);
         // Gemini 失敗（配額用完等）→ 落回本地字庫
         if (!cancelled) {
           const local = localSuggest(q);

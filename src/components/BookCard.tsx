@@ -38,6 +38,7 @@ interface Props {
   index?: number;
   glowColor?: [number, number, number] | null;
   searchQuery?: string;
+  highlighted?: boolean;
 }
 
 const CAT_GRADIENT: Record<string, string> = {
@@ -55,7 +56,7 @@ const CAT_GRADIENT: Record<string, string> = {
   'other': 'from-emerald-500 to-teal-500',
 };
 
-export default function BookCard({ book, onClick, glowColor, searchQuery = '' }: Props) {
+export default function BookCard({ book, onClick, glowColor, searchQuery = '', highlighted = false }: Props) {
   const catId   = getCategoryId(book.callNumber);
   const catName = CATEGORIES.find(c => c.id === catId)?.name ?? '其他';
   const grad    = CAT_GRADIENT[catId] ?? CAT_GRADIENT['other'];
@@ -84,10 +85,12 @@ export default function BookCard({ book, onClick, glowColor, searchQuery = '' }:
                  transition-all duration-500 ease-out
                  hover:shadow-2xl hover:-translate-y-2 hover:rotate-[0.4deg]"
       style={{
-        border: glowRgb ? `2px solid ${glowRgb}` : '2px solid #f5f5f4',
-        boxShadow: glowRgba
-          ? `0 0 0 0 ${glowRgba}, 0 4px 24px ${glowRgba}`
-          : undefined,
+        border: highlighted
+          ? '2px solid #f59e0b'
+          : glowRgb ? `2px solid ${glowRgb}` : '2px solid #f5f5f4',
+        boxShadow: highlighted
+          ? '0 0 0 3px rgba(245,158,11,0.2), 0 4px 24px rgba(245,158,11,0.25)'
+          : glowRgba ? `0 0 0 0 ${glowRgba}, 0 4px 24px ${glowRgba}` : undefined,
       }}
       onClick={onClick}
     >
@@ -109,6 +112,19 @@ export default function BookCard({ book, onClick, glowColor, searchQuery = '' }:
         {/* 底部漸層遮罩 */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent
                         opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
+        {/* 推薦先讀緞帶 */}
+        {highlighted && (
+          <motion.div
+            initial={{ opacity: 0, x: 10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.3 }}
+            className="absolute top-3 right-0 bg-amber-400 text-white text-[9px] font-bold
+                       px-2 py-0.5 rounded-l-full shadow-md z-20 flex items-center gap-0.5"
+          >
+            ✨ 推薦先讀
+          </motion.div>
+        )}
 
         {/* Sparkle（hover 時浮現） */}
         <div className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100
@@ -174,7 +190,7 @@ export default function BookCard({ book, onClick, glowColor, searchQuery = '' }:
         </h3>
 
         {book.description && (
-          <p className="text-stone-400 text-xs line-clamp-2 mb-3 h-8">{book.description}</p>
+          <p className="text-stone-400 text-xs line-clamp-2 mb-2 h-8">{book.description}</p>
         )}
 
         <div className="space-y-1.5 mt-auto mb-4">

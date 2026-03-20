@@ -20,6 +20,7 @@ import { useNeuralSearch } from './hooks/useNeuralSearch';
 import { useSearch } from './hooks/useSearch';
 import { useSearchReason } from './hooks/useSearchReason';
 import { useIntentSuggestions } from './hooks/useIntentSuggestions';
+import { useAIResponseMessage } from './hooks/useAIResponseMessage';
 import BookCard from './components/BookCard';
 import BookModal from './components/BookModal';
 import PwaInstallBanner from './components/PwaInstallBanner';
@@ -362,48 +363,102 @@ function FilterSidebar({
 // ── 分類閱讀冷知識 & 幽默備案 ─────────────────────────
 const CATEGORY_FACTS: Record<string, string[]> = {
   '0': [
-    '你知道嗎？人類每天產生的資料量足夠填滿 1000 座圖書館，資訊爆炸時代更需要篩選力！',
+    '人類每天產生的資料量足夠填滿 1000 座圖書館，資訊爆炸時代更需要篩選力！',
     '全球最大圖書館是美國國會圖書館，書架加起來長達 1600 公里——比台灣南北長 10 倍。',
+    '世界上第一本「百科全書」由中國的《永樂大典》保持紀錄：22,877 卷，共 3.7 億字。',
+    '谷歌計畫掃描全球所有書籍，估計總數約為 1.3 億本——人類知識的總量已知但還未全部數位化。',
+    '「維基百科」每天有超過 800 篇新條目誕生，相當於每 2 分鐘就有一條新知識被記錄下來。',
+    '人類歷史上 95% 的書籍從未被數位化，它們靜靜地躺在全球各地的書架與倉庫裡等待被讀到。',
   ],
   '1': [
-    '你知道嗎？拖延症的英文 Procrastination 源自拉丁文「推到明天」——哲學家兩千年前就在煩惱這件事了。',
+    '拖延症的英文 Procrastination 源自拉丁文「推到明天」——哲學家兩千年前就在煩惱這件事了。',
     '蘇格拉底一輩子沒有親筆寫過任何一本書，他的思想全靠學生柏拉圖記錄下來。',
+    '笛卡兒說「我思故我在」的那一刻，他正蜷縮在荷蘭一個火爐旁——偉大的思想不需要豪華的辦公室。',
+    '尼采的代表作《查拉圖斯特拉如是說》最初只賣出 40 本，出版商拒絕印第四部分，他只好自費印刷。',
+    '亞里斯多德的著作涵蓋物理、生物、詩學、政治——他是人類歷史上最後一個幾乎「懂所有事」的人。',
+    '斯多葛哲學由奴隸和皇帝共同發揚——愛比克泰德是奴隸，馬可·奧理略是羅馬皇帝，哲學真的不分貴賤。',
+    '康德一生從未離開出生地哥尼斯堡超過 80 公里，卻寫出了改變西方哲學方向的「三大批判」。',
   ],
   '2': [
-    '你知道嗎？世界上有 4200 多種宗教，人類對「意義」的追尋從未停止過。',
+    '世界上有 4200 多種宗教，人類對「意義」的追尋從未停止過。',
     '《聖經》是全球翻譯語言最多的書，已被譯成超過 700 種語言，幾乎覆蓋地球所有語系。',
+    '佛陀在世時並未寫下任何文字，他的教義靠弟子口耳相傳，直到他圓寂後 400 年才被寫成文字。',
+    '伊斯蘭教的《古蘭經》被認為是阿拉伯文學的最高峰，其韻律之美至今仍讓語言學家著迷。',
+    '全球每分鐘有超過 10,000 人在進行各種形式的宗教儀式——這是人類最古老、最普遍的集體行為。',
+    '日本神道教的神明多達 800 萬個，甚至連門把、茶壺都可能住著神明。',
   ],
   '3': [
-    '你知道嗎？全球 80% 的財富掌握在 20% 的人手中，這就是著名的帕累托法則。',
-    '根據研究，每天閱讀 6 分鐘就能降低 68% 的壓力，比聽音樂或散步效果還要好！',
+    '人類每天閱讀 6 分鐘就能降低 68% 的壓力，比聽音樂或散步效果還要好！',
+    '全球 80% 的財富掌握在 20% 的人手中，這就是著名的帕累托法則——最初是用來描述豌豆收成的。',
+    '章魚有三顆心臟和藍色的血液——大自然設計出的生命形式，遠比任何科幻小說都更奇特。',
+    '蜜蜂需要採集 200 萬朵花的花蜜，才能製造出一罐 500 克的蜂蜜——每一口甜都得來不易。',
+    '地球上 71% 是海洋，但人類只探索了不到 20%——我們對深海的了解，比對月球表面還要少。',
+    '大腦裡的神經連結數量，比宇宙中已知的星球數量還要多——你的腦袋是已知宇宙中最複雜的結構。',
+    '樹木之間透過地下真菌網絡互相傳遞養分和訊息，科學家稱之為「森林的網際網路」。',
   ],
   '4': [
-    '你知道嗎？全球有超過 500 種程式語言，但最熱門的前 5 種就佔了開發者日常工作的 80%。',
+    '全球有超過 500 種程式語言，但最熱門的前 5 種就佔了開發者日常工作的 80%。',
     '人類大腦處理圖像的速度比文字快 6 萬倍，所以「一圖勝千言」真的有科學根據！',
+    '「Bug」這個詞最初是真的蟲子：1947 年第一個電腦錯誤，是一隻飛蛾卡在哈佛大學電腦的繼電器裡。',
+    '現在你的手機算力，比 1969 年阿波羅登月任務全部電腦加起來還要強大超過 100 萬倍。',
+    '全球每天有超過 80 億次 Google 搜尋——人類的好奇心，每秒鐘發生約 9 萬次。',
+    '世界第一個程式設計師是女性：愛達·勒芙蕾斯在 1843 年就寫出了人類史上第一個電腦程式。',
+    '3D 列印技術已能製造出可植入人體的耳廓和膝蓋軟骨——科技與生命的邊界正在溶解。',
   ],
   '5': [
-    '你知道嗎？哈佛追蹤 80 年的研究發現，決定幸福感的最重要因素是人際關係品質，不是錢。',
+    '哈佛追蹤 80 年的研究發現，決定幸福感的最重要因素是人際關係品質，不是錢也不是名。',
     '社會學研究指出，平均只需 6 個人際連結，你就能認識地球上的任何一個人。',
+    '全球有超過 2400 種語言瀕臨消失，平均每兩週就有一種語言從地球上消亡。',
+    '研究發現，一個人一生平均只會深度結交 5 位朋友——但這 5 位，決定了你 80% 的人生走向。',
+    '微笑是全人類共通的語言，即使從未接觸過文明的部落成員，看到笑臉也能辨識出情緒。',
+    '志願服務的人，平均壽命比不參與社區活動的人長 4 年——給予，真的能讓自己更健康。',
+    '心理學研究發現，「感恩」練習持續 21 天，可以永久重塑大腦的神經迴路，讓人更容易感到快樂。',
   ],
   '6': [
-    '你知道嗎？台灣曾是全球書店密度最高的地方之一，每 10 萬人約有 20 家書店。',
+    '台灣曾是全球書店密度最高的地方之一，每 10 萬人約有 20 家書店。',
     '故宮典藏超過 69 萬件文物，若每件看 1 分鐘，需要連續不睡地看上整整 1.3 年！',
+    '台灣的夜市文化源於清朝，最早是廟口的臨時攤販，如今已成為全球認識台灣的第一名片。',
+    '漢字是世界上使用人數最多的書寫系統，全球約有 15 億人使用，跨越語言卻共享文字的美。',
+    '中國歷史上的科舉制度持續了 1300 年，是人類歷史上最長的考試制度。',
+    '《史記》由司馬遷在遭受腐刑後繼續完成，是在最大的屈辱中誕生的最偉大的歷史著作之一。',
+    '唐朝長安是當時全球最大的城市，人口超過 100 萬，各國商旅、傳教士、藝術家匯聚一堂。',
   ],
   '7': [
-    '你知道嗎？世界上最古老的地圖距今已有 2600 年，刻在一塊巴比倫泥板上。',
-    '地球有 195 個國家，但全球護照只有紅、藍、綠、黑、酒紅 5 種顏色。',
+    '世界上最古老的地圖距今已有 2600 年，刻在一塊巴比倫泥板上。',
+    '地球有 195 個國家，但全球護照只有紅、藍、綠、黑、酒紅 5 種顏色——一切都暗含邏輯。',
+    '克麗奧佩托拉距離我們的時代，比她距離吉薩金字塔建成的時代更近——歷史比你想的更長。',
+    '成吉思汗的帝國佔地球陸地面積的 22%，至今仍是人類歷史上最大的連續帝國。',
+    '法國大革命爆發時，美國才剛建國 13 年——那個時代的「新聞」，是用馬和船傳遞的。',
+    '古羅馬的高峰時期，羅馬城管理著當時全球 20% 的人口，並建造了 80,000 公里長的道路。',
+    '二戰結束時，全球超過 5500 萬人死亡——這段歷史，讓「和平」成為人類最珍貴的詞彙。',
   ],
   '8': [
-    '你知道嗎？村上春樹每天固定跑 10 公里，他說跑步賦予他寫長篇小說所需的體力與專注力。',
+    '村上春樹每天固定跑 10 公里，他說跑步賦予他寫長篇小說所需的體力與專注力。',
     '《哈利波特》系列全球銷量超過 5 億本，疊起來的高度足以繞地球赤道 20 圈。',
+    '《老人與海》只有 27,000 字，卻讓海明威拿下諾貝爾文學獎——偉大不靠字數決定。',
+    '卡夫卡生前幾乎沒有發表作品，他要求朋友在他死後燒掉所有手稿；朋友違背了他的遺願，世界因此留下了《城堡》和《審判》。',
+    '《百年孤寂》的作者馬奎斯說，他在公路旁突然知道了整本書的開頭一句，立刻掉頭回家，用 18 個月寫完全書。',
+    '莎士比亞一生創作了 37 部劇本和 154 首十四行詩，他使用的詞彙量超過 2 萬個——是一般人的 4 倍。',
+    '《小王子》在全球有超過 300 種語言譯本，是史上被翻譯最多次的非宗教類書籍。',
+    '張愛玲說：「出名要趁早。」她 23 歲時出版第一部小說集，立刻轟動上海文壇。',
   ],
   '9': [
-    '你知道嗎？欣賞藝術品 10 秒鐘就能降低焦慮感，博物館正在成為「處方療癒」的新場所。',
+    '欣賞藝術品 10 秒鐘就能降低焦慮感，博物館正在成為「處方療癒」的新場所。',
     '音樂能同時啟動大腦的語言、記憶、情感、運動四個區域，是最全面的腦部鍛鍊！',
+    '梵谷生前只賣出過一幅畫，如今他的作品是全球保險金額最高的藝術品之一。',
+    '電影《泰坦尼克號》的製作費用比建造真正泰坦尼克號還要高——藝術重現歷史有時比歷史本身更貴。',
+    '古典音樂在學習時播放，能提升空間推理能力達 8–9 分——這就是著名的「莫扎特效應」。',
+    '全球每天有超過 500 小時的影片被上傳到 YouTube，人類創作內容的速度，已超越任何一個人能消化的極限。',
+    '畢卡索一生創作了約 20,000 件作品，平均每天完成一件——他說：「靈感存在，但它必須在你工作的時候找到你。」',
   ],
   'child': [
-    '你知道嗎？兒童平均每天會問 300 個問題！保持好奇心，是所有偉大發現的起點。',
+    '兒童平均每天會問 300 個問題！保持好奇心，是所有偉大發現的起點。',
     '研究顯示，從小養成閱讀習慣的孩子，長大後的詞彙量是同齡人的 3 倍！',
+    '哈利·波特系列讓全球數百萬不愛閱讀的孩子第一次主動拿起書——一個故事真的能改變一代人。',
+    '孩子在 3 歲前學到的語言量，對他 18 歲的語言能力影響高達 80%——每一次親子共讀都在埋下未來的種子。',
+    '皮克斯的電影製作有個規則：必須讓大人哭，讓小孩笑——真正好的故事是沒有年齡限制的。',
+    '《夏綠蒂的網》的作者 E.B. 懷特說：「寫給孩子，就要像寫給最嚴格的文學評論家一樣認真。」',
+    '全球兒童閱讀指數最高的國家是芬蘭——他們從小學教小孩的不是「讀什麼」，而是「為什麼讀」。',
   ],
 };
 
@@ -528,13 +583,118 @@ function getMoodFacts(query: string): string[] | null {
   return null;
 }
 
+// ── Rule-based AI 回應句 + 推薦理由 ─────────────────────
+const AI_RESPONSE_RULES: [string[], { message: string; reason: string }][] = [
+  [['焦慮', '壓力', '崩潰', '煩惱', '心情不好', '緊張', '不安'], {
+    message: '看起來你最近有點焦慮，\n我幫你找了一些能幫助放鬆與情緒調整的書。',
+    reason: '因為你搜尋了情緒相關主題，這本書提供實用的壓力釋放方法',
+  }],
+  [['憂鬱', '低落', '難過', '傷心', '喪', '失落', '迷茫'], {
+    message: '心情低落的時候，書是最溫柔的陪伴。\n我幫你找了幾本能帶來慰藉的書。',
+    reason: '適合情緒低潮時閱讀，幫助重新找回內心的平靜',
+  }],
+  [['發大財', '大財', '有錢', '賺錢', '發財', '致富', '理財', '投資', '財富', '商業', '創業'], {
+    message: '想讓錢替你工作嗎？\n從觀念到實戰，這幾本書各個階段都適合。',
+    reason: '幫助建立財務思維，找到適合自己的投資與理財策略',
+  }],
+  [['成長', '改變', '突破', '進化', '自律', '習慣', '蛻變'], {
+    message: '想讓自己變得更好？\n這幾本關於成長與自我突破的書，很多人都說看完就不一樣了。',
+    reason: '適合想建立好習慣、突破現狀的讀者',
+  }],
+  [['孤獨', '寂寞', '獨處', '一個人'], {
+    message: '一個人的時候，書是最好的陪伴。\n這幾本或許能幫你在獨處中找到力量。',
+    reason: '陪你在獨處中找到內心的平靜與自我認識',
+  }],
+  [['愛情', '戀愛', '失戀', '暗戀', '浪漫', '心動', '告白'], {
+    message: '愛情是人生中最複雜的功課之一。\n這幾本書也許能幫你更了解自己與他人。',
+    reason: '探索愛與關係的深度，幫助你在感情中更自在',
+  }],
+  [['工作', '職場', '升職', '管理', '領導', '職涯'], {
+    message: '職場路上，知識是最好的武器。\n這幾本書能幫你在工作上更進一步。',
+    reason: '針對職場挑戰提供實用建議與思維框架',
+  }],
+  [['親子', '育兒', '孩子', '家庭', '父母', '小孩'], {
+    message: '陪伴孩子成長，是最美好也最辛苦的事。\n這幾本或許能讓你更從容地面對。',
+    reason: '幫助父母理解孩子，建立更深的親子連結',
+  }],
+  [['旅行', '冒險', '探索', '流浪', '遠方', '出走'], {
+    message: '想出發探索這個世界嗎？\n先從這幾本書開始，讓心靈先旅行一次。',
+    reason: '帶你踏上紙上旅程，激發對未知世界的好奇心',
+  }],
+  [['推理', '偵探', '懸疑', '謎題', '燒腦', '解謎'], {
+    message: '喜歡燒腦的快感？\n這幾本推理故事保證讓你一翻就停不下來。',
+    reason: '挑戰你的邏輯思維，帶來解開謎題的滿足感',
+  }],
+  [['療癒', '放鬆', '舒壓', '冥想', '平靜', '安心'], {
+    message: '讓自己喘口氣吧。\n這幾本書適合在安靜的角落，慢慢翻閱。',
+    reason: '輕鬆閱讀，幫助身心放鬆、恢復能量',
+  }],
+  [['歷史', '古代', '文明', '朝代', '帝王', '戰爭'], {
+    message: '歷史是最好的老師。\n這幾本書帶你穿越時空，看見不一樣的世界。',
+    reason: '透過歷史的視角，重新理解當下這個世界',
+  }],
+  [['科技', 'AI', '人工智慧', '未來', '數位', '機器人'], {
+    message: '未來已來，準備好了嗎？\n這幾本書幫你理解正在改變世界的科技力量。',
+    reason: '掌握科技趨勢，在數位時代保持競爭力',
+  }],
+  [['哲學', '人生', '思考', '意義', '存在', '覺悟'], {
+    message: '有些問題沒有標準答案，但值得一問。\n這幾本書陪你探索人生的深度。',
+    reason: '引導深度思考，幫助你釐清人生的方向與價值',
+  }],
+];
+
+function generateAIResponse(query: string): { message: string; reason: string } | null {
+  if (!query.trim()) return null;
+  const q = query.toLowerCase();
+  for (const [keywords, resp] of AI_RESPONSE_RULES) {
+    if (keywords.some(k => q.includes(k))) return resp;
+  }
+  return {
+    message: `你搜尋了「${query}」，\n我幫你找了最相關的書單。`,
+    reason: `符合「${query}」主題的精選書籍`,
+  };
+}
+
 const FUNNY_MESSAGES = [
   '🤖 AI 思考過度，正在喝機油充電中… 但它剛才悄悄告訴我，這幾本你一定會喜歡！',
   '🤖 AI 正在宇宙某處搜索靈感，請稍候… 總之這幾本書評價很高，先翻翻看！',
   '📚 據不可靠消息指出，讀完這幾本書的人，都過上了他們想要的生活。（樣本數：1）',
   '🔮 AI 水晶球正在校準中… 但直覺告訴我，你會喜歡這幾本的！',
   '🤖 偵測到使用者品味極佳，正在為您挑選最優質書單中… 其實就是這幾本，快看！',
+  '📖 比爾·蓋茲每年讀 50 本書，巴菲特每天花 80% 的時間閱讀。你今天讀了嗎？',
+  '🌱 研究顯示：閱讀小說能提升同理心——因為你在練習「住進別人的腦袋裡」。',
+  '✨ 每本書都是一扇門。你永遠不知道打開之後，會走進哪一個世界。',
+  '🧠 科學家發現，閱讀習慣強的人在老年後認知退化的速度慢 32%——這是最划算的健腦投資。',
+  '📚 世界上每分鐘出版約 2000 本新書——所以說「沒有好書看」這句話，永遠不成立。',
+  '🤖 AI 小聲說：這幾本的退貨率是零，因為讀完的人都在借給別人。',
+  '🔖 一位圖書館員說：「真正愛讀書的人，進圖書館會有回家的感覺。」歡迎回家。',
 ];
+
+// ── 口語 query 展開（送進搜尋引擎前轉為可索引短關鍵字）
+// 注意：Fuse.js 將整個字串當成一個 pattern 去比對，
+//       故展開詞必須是書目裡實際會出現的短詞，不能是長句。
+const QUERY_EXPANSION: [string[], string][] = [
+  [['發大財', '大財', '有錢', '賺錢', '發財', '致富', '財富自由', '存錢'], '理財'],
+  [['焦慮', '不安', '緊張', '壓力大', '喘不過氣'],                         '焦慮'],
+  [['心情不好', '難過', '低落', '憂鬱', '崩潰', '喪'],                      '療癒'],
+  [['改變自己', '想變好', '突破自我', '蛻變'],                              '成長'],
+  [['一個人', '好孤獨', '好寂寞'],                                          '孤獨'],
+  [['睡不好', '睡不著', '失眠'],                                            '睡眠'],
+  [['想瘦', '減肥', '想健身'],                                              '運動'],
+  [['工作壓力', '上班好累', '換工作', '職涯'],                              '職場'],
+  [['失戀了', '分手了', '暗戀'],                                            '愛情'],
+  [['想出走', '想流浪', '去哪旅行'],                                        '旅行'],
+  [['教小孩', '陪孩子', '不知道怎麼育兒'],                                  '親子'],
+  [['思考人生', '人生意義', '活著為何'],                                    '哲學'],
+];
+
+function expandQuery(query: string): string {
+  const q = query.toLowerCase();
+  for (const [keywords, expansion] of QUERY_EXPANSION) {
+    if (keywords.some(k => q.includes(k))) return expansion;
+  }
+  return query; // 無命中 → 原樣送出
+}
 
 // ── 主 App ────────────────────────────────────────────
 export default function App() {
@@ -635,10 +795,13 @@ export default function App() {
     return counts;
   }, [monthFilteredBooks]);
 
+  // 口語 query → 可索引關鍵字（只影響搜尋引擎，不影響 AI 回應/情緒偵測）
+  const searchQueryForBooks = useMemo(() => expandQuery(searchQuery), [searchQuery]);
+
   // 語義搜尋（神經網路就緒後接管；未就緒時 scoredBooks=null）
-  const { scoredBooks: neuralBooks, suggestions: neuralSuggestions, modelStatus } = useNeuralSearch(monthFilteredBooks, searchQuery);
+  const { scoredBooks: neuralBooks, suggestions: neuralSuggestions, modelStatus } = useNeuralSearch(monthFilteredBooks, searchQueryForBooks);
   // Fuse.js fallback：神經網路尚未就緒時提供語義相近的模糊比對
-  const { scoredBooks: fuseBooks, suggestions: fuseSuggestions } = useSearch(monthFilteredBooks, searchQuery);
+  const { scoredBooks: fuseBooks, suggestions: fuseSuggestions } = useSearch(monthFilteredBooks, searchQueryForBooks);
   const scoredBooks = neuralBooks ?? fuseBooks;
   const suggestions = neuralBooks ? neuralSuggestions : fuseSuggestions;
   const isSearching = scoredBooks !== null;
@@ -706,6 +869,22 @@ export default function App() {
     setSelectedBranches([]); setYearRange(monthYearBounds);
     setSelectedColorId(null);
   }, [monthYearBounds]);
+
+  // Rule-based AI 回應句（有結果時才顯示，避免 0 本時說「這幾本書」）
+  const aiResponse = useMemo(
+    () => (isSearching && filteredBooks.length > 0 ? generateAIResponse(searchQuery) : null),
+    [isSearching, filteredBooks.length, searchQuery],
+  );
+
+  // Gemini AI 回應句（有 key 時非同步取得；無 key 則空字串，回退到 rule-based）
+  const top3Books = useMemo(() => scoredBooks?.slice(0, 3) ?? [], [scoredBooks]);
+  const aiGeminiMessage = useAIResponseMessage(searchQuery, filteredBooks.length, top3Books);
+  const highlightedBibIds = useMemo(
+    () => new Set(isSearching ? top3Books.map(b => b.bibId).filter(Boolean) : []),
+    [isSearching, top3Books],
+  );
+  // 顯示優先：Gemini > rule-based > 不顯示
+  const aiDisplayMessage = aiGeminiMessage || aiResponse?.message || '';
 
   // 情緒主題色：色系篩選 > 搜尋情緒色 > null
   const selectedColorRgb = selectedColorId
@@ -874,6 +1053,23 @@ export default function App() {
               </div>
             </div>
 
+            {/* AI 回應句（搜尋後顯示；rule-based 即時出現，Gemini 回來後淡入替換） */}
+            <AnimatePresence mode="wait">
+              {isSearching && aiDisplayMessage ? (
+                <motion.div
+                  key={aiDisplayMessage}
+                  initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }} transition={{ duration: 0.25 }}
+                  className="mt-3 flex items-start gap-2 px-1"
+                >
+                  <span className="text-base shrink-0 mt-0.5">🤖</span>
+                  <p className="text-sm text-stone-600 leading-relaxed whitespace-pre-line">
+                    {aiDisplayMessage}
+                  </p>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
+
             {/* AI 意圖預測氣泡（輸入中即時顯示） */}
             <AnimatePresence>
               {inputValue && (intentSuggestions.length > 0 || intentLoading) && (
@@ -1020,8 +1216,25 @@ export default function App() {
             </div>
           )}
 
-          {/* 分類 tabs */}
-          <div className="flex flex-wrap gap-2 mb-6 pb-1 overflow-x-auto no-scrollbar">
+          {/* 分類 tabs — 手機：下拉選單；桌機：橫向捲動 */}
+          {/* 手機版 select */}
+          <div className="sm:hidden mb-4">
+            <select
+              value={activeCategory}
+              onChange={e => setActiveCategory(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-2xl text-sm font-medium bg-white border-2 border-stone-200
+                         focus:border-emerald-400 outline-none shadow-sm text-stone-700 transition-colors"
+            >
+              {CATEGORIES.filter(c => (catCounts[c.id] ?? 0) > 0 || c.id === 'all').map(cat => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name}{catCounts[cat.id] !== undefined ? `  ·  ${catCounts[cat.id]} 本` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 桌機版橫向捲動 tabs */}
+          <div className="hidden sm:flex gap-2 mb-6 pb-1 overflow-x-auto no-scrollbar">
             {CATEGORIES.filter(c => (catCounts[c.id] ?? 0) > 0 || c.id === 'all').map(cat => (
               <button key={cat.id} onClick={() => setActiveCategory(cat.id)}
                 className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300 whitespace-nowrap ${
@@ -1200,6 +1413,7 @@ export default function App() {
                         index={i}
                         searchQuery={searchQuery}
                         glowColor={activeThemeColor}
+                        highlighted={!!(book.bibId && highlightedBibIds.has(book.bibId))}
                         onClick={() => setSelectedBook(book)}
                       />
                     ))
