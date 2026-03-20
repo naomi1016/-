@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+public/neural_embeddings.json
+__pycache__/
+*.pyc
+.DS_Store

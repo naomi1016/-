@@ -1,0 +1,5 @@
+{
+  "name": "北圖新書通報",
+  "description": "展示台北市立圖書館新進館藏的單頁式網頁，支援分類過濾與關鍵字查詢。",
+  "requestFramePermissions": []
+}
