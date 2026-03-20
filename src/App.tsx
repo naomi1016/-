@@ -5,15 +5,15 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
-  Search, BookOpen, Filter,
+  Search, BookOpen, Filter, Sparkles,
   X, Loader2, CalendarDays,
-  AlertCircle, RefreshCw, Globe, Layers, MapPin, ChevronDown,
+  AlertCircle, RefreshCw, Globe, MapPin, ChevronDown, BookText, Palette,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
 import type { Book } from './types';
 import { BRANCH_MAP, LANGUAGE_LABELS, CATEGORIES, COLOR_PALETTE } from './constants';
-import { getCategoryId } from './utils';
+import { getCategoryId, detectLanguage } from './utils';
 import { useBooks, useFilteredBooks } from './hooks/useBooks';
 import type { SortBy, SortDir } from './hooks/useBooks';
 import { useNeuralSearch } from './hooks/useNeuralSearch';
@@ -21,6 +21,7 @@ import { useSearch } from './hooks/useSearch';
 import { useSearchReason } from './hooks/useSearchReason';
 import BookCard from './components/BookCard';
 import BookModal from './components/BookModal';
+import PwaInstallBanner from './components/PwaInstallBanner';
 
 // ── 出版年份區間滑桿 ──────────────────────────────────
 function YearRangeSlider({
@@ -71,7 +72,7 @@ function YearRangeSlider({
           onChange={e => setLoText(e.target.value)}
           onBlur={e => commitLo(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && commitLo(loText)}
-          className="w-16 text-center text-sm font-mono bg-stone-50 border border-stone-200 rounded-lg py-1 px-1 focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400 outline-none"
+          className="w-16 text-center text-sm font-bold font-mono bg-white border-2 border-stone-200 rounded-xl py-1.5 px-1 focus:border-emerald-400 outline-none shadow-sm transition-colors hover:border-stone-300"
         />
         <span className="flex-1 h-px bg-stone-200"/>
         <input
@@ -79,7 +80,7 @@ function YearRangeSlider({
           onChange={e => setHiText(e.target.value)}
           onBlur={e => commitHi(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && commitHi(hiText)}
-          className="w-16 text-center text-sm font-mono bg-stone-50 border border-stone-200 rounded-lg py-1 px-1 focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400 outline-none"
+          className="w-16 text-center text-sm font-bold font-mono bg-white border-2 border-stone-200 rounded-xl py-1.5 px-1 focus:border-emerald-400 outline-none shadow-sm transition-colors hover:border-stone-300"
         />
       </div>
 
@@ -123,51 +124,6 @@ function YearRangeSlider({
           style={{ zIndex: 4 }}
         />
       </div>
-    </div>
-  );
-}
-
-// ── 色系選色器 ────────────────────────────────────────
-function ColorSwatchPicker({
-  selectedColorId,
-  setSelectedColorId,
-}: {
-  selectedColorId: string | null;
-  setSelectedColorId: React.Dispatch<React.SetStateAction<string | null>>;
-}) {
-  return (
-    <div>
-      <h4 className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-stone-400 mb-2.5">
-        🎨 封面色系
-      </h4>
-      <div className="grid grid-cols-6 gap-1.5">
-        {COLOR_PALETTE.map(({ id, name, rgb }) => {
-          const isSelected = selectedColorId === id;
-          return (
-            <button
-              key={id}
-              title={name}
-              onClick={() => setSelectedColorId(isSelected ? null : id)}
-              className={`w-7 h-7 rounded-full transition-all duration-150 ${
-                isSelected
-                  ? 'ring-2 ring-offset-1 ring-stone-600 scale-110'
-                  : 'hover:scale-110 hover:ring-1 hover:ring-stone-400 hover:ring-offset-1'
-              }`}
-              style={{ backgroundColor: `rgb(${rgb.join(',')})`,
-                       border: id === 'cream' ? '1px solid #d6d3d1' : undefined }}
-            />
-          );
-        })}
-      </div>
-      {selectedColorId && (
-        <p className="mt-1.5 text-[11px] text-stone-500">
-          {COLOR_PALETTE.find(c => c.id === selectedColorId)?.name} 色系
-          <button
-            onClick={() => setSelectedColorId(null)}
-            className="ml-1.5 text-stone-400 hover:text-red-400"
-          >✕</button>
-        </p>
-      )}
     </div>
   );
 }
@@ -217,11 +173,18 @@ function FilterSidebar({
 
   const yearActive = yearRange[0] !== yearBounds[0] || yearRange[1] !== yearBounds[1];
 
+  const LANG_EMOJI: Record<string, string> = { CHI:'🇹🇼', ENG:'🇺🇸', KOR:'🇰🇷', JPN:'🇯🇵', FRE:'🇫🇷' };
+  const TYPE_EMOJI: Record<string, string> = { '圖書':'📚', '視聽資料':'📀', '期刊':'📰', '其他':'📦' };
+
   return (
-    <aside className="w-56 shrink-0 space-y-6 overflow-y-auto pr-1">
+    <aside className="w-60 shrink-0 space-y-6 overflow-y-auto pr-1">
+      {/* 篩選標題 */}
       <div className="flex items-center justify-between">
-        <h3 className="flex items-center gap-1.5 text-sm font-bold text-stone-700">
-          <Filter size={14}/> 篩選
+        <h3 className="flex items-center gap-2 text-sm font-bold text-stone-700">
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow shadow-emerald-400/30">
+            <Filter size={13} className="text-white"/>
+          </div>
+          篩選
         </h3>
         {activeFilterCount > 0 && (
           <button onClick={clearAllFilters}
@@ -233,16 +196,14 @@ function FilterSidebar({
       </div>
 
       {/* 出版年份 */}
-      <div>
-        <div className="flex items-center justify-between mb-2.5">
-          <h4 className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-stone-400">
-            出版年份
+      <div className="p-3.5 rounded-2xl bg-stone-100/70 border border-stone-200/60">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="text-[11px] font-bold uppercase tracking-widest text-stone-500 flex items-center gap-1.5">
+            📅 出版年份
           </h4>
           {yearActive && (
-            <button
-              onClick={() => setYearRange(yearBounds)}
-              className="text-[10px] text-stone-400 hover:text-red-400 transition-colors"
-            >
+            <button onClick={() => setYearRange(yearBounds)}
+              className="text-[10px] text-stone-400 hover:text-red-400 transition-colors">
               重設
             </button>
           )}
@@ -256,12 +217,19 @@ function FilterSidebar({
 
       {/* 語言 */}
       <div>
-        <h4 className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-stone-400 mb-2.5">
-          <Globe size={11}/> 語言
+        <h4 className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-stone-500 mb-2.5">
+          <div className="w-6 h-6 rounded-lg bg-teal-100 flex items-center justify-center">
+            <Globe size={11} className="text-teal-600"/>
+          </div>
+          語言
         </h4>
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           {availableLanguages.map(({ code, label, count }) => (
-            <label key={code} className="flex items-center gap-2 cursor-pointer group">
+            <label key={code}
+              className={`flex items-center gap-2.5 cursor-pointer p-2.5 rounded-xl transition-all duration-200
+                          hover:bg-stone-100 hover:scale-[1.02] hover:shadow-sm
+                          ${selectedLanguages.includes(code) ? 'bg-stone-100 shadow-sm' : ''}`}
+            >
               <input type="checkbox"
                 checked={selectedLanguages.includes(code)}
                 onChange={e => {
@@ -270,8 +238,9 @@ function FilterSidebar({
                 }}
                 className="rounded accent-emerald-600 w-3.5 h-3.5 shrink-0"
               />
-              <span className="text-sm text-stone-700 group-hover:text-stone-900 flex-1">{label}</span>
-              <span className="text-[11px] text-stone-400">{count}</span>
+              <span className="text-base leading-none">{LANG_EMOJI[code] ?? '🌐'}</span>
+              <span className="text-sm text-stone-700 flex-1">{label}</span>
+              <span className="text-[11px] font-semibold text-stone-400 bg-stone-200/70 px-2 py-0.5 rounded-full tabular-nums">{count}</span>
             </label>
           ))}
         </div>
@@ -280,12 +249,19 @@ function FilterSidebar({
       {/* 資料類型 */}
       {availableMaterialTypes.length > 0 && (
         <div>
-          <h4 className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-stone-400 mb-2.5">
-            <Layers size={11}/> 資料類型
+          <h4 className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-stone-500 mb-2.5">
+            <div className="w-6 h-6 rounded-lg bg-violet-100 flex items-center justify-center">
+              <BookText size={11} className="text-violet-600"/>
+            </div>
+            資料類型
           </h4>
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             {availableMaterialTypes.map(({ code, count }) => (
-              <label key={code} className="flex items-center gap-2 cursor-pointer group">
+              <label key={code}
+                className={`flex items-center gap-2.5 cursor-pointer p-2.5 rounded-xl transition-all duration-200
+                            hover:bg-stone-100 hover:scale-[1.02] hover:shadow-sm
+                            ${selectedMaterialTypes.includes(code) ? 'bg-stone-100 shadow-sm' : ''}`}
+              >
                 <input type="checkbox"
                   checked={selectedMaterialTypes.includes(code)}
                   onChange={e => {
@@ -294,8 +270,9 @@ function FilterSidebar({
                   }}
                   className="rounded accent-emerald-600 w-3.5 h-3.5 shrink-0"
                 />
-                <span className="text-sm text-stone-700 group-hover:text-stone-900 flex-1">{code}</span>
-                <span className="text-[11px] text-stone-400">{count}</span>
+                <span className="text-base leading-none">{TYPE_EMOJI[code] ?? '📄'}</span>
+                <span className="text-sm text-stone-700 flex-1">{code}</span>
+                <span className="text-[11px] font-semibold text-stone-400 bg-stone-200/70 px-2 py-0.5 rounded-full tabular-nums">{count}</span>
               </label>
             ))}
           </div>
@@ -303,20 +280,55 @@ function FilterSidebar({
       )}
 
       {/* 色系 */}
-      <ColorSwatchPicker
-        selectedColorId={selectedColorId}
-        setSelectedColorId={setSelectedColorId}
-      />
+      <div>
+        <h4 className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-stone-500 mb-2.5">
+          <div className="w-6 h-6 rounded-lg bg-pink-100 flex items-center justify-center">
+            <Palette size={11} className="text-pink-500"/>
+          </div>
+          封面色系
+        </h4>
+        <div className="grid grid-cols-7 gap-2 p-3 rounded-2xl bg-stone-100/60">
+          {COLOR_PALETTE.map(({ id, name, rgb }) => {
+            const isSelected = selectedColorId === id;
+            return (
+              <button
+                key={id} title={name}
+                onClick={() => setSelectedColorId(isSelected ? null : id)}
+                className={`w-7 h-7 rounded-full transition-all duration-300 transform
+                            hover:scale-125 hover:rotate-12 hover:shadow-lg
+                            ${isSelected
+                              ? 'scale-125 ring-2 ring-offset-2 ring-offset-stone-100 ring-stone-600 shadow-lg'
+                              : 'hover:ring-2 hover:ring-offset-1 hover:ring-stone-400'}`}
+                style={{ backgroundColor: `rgb(${rgb.join(',')})`,
+                         border: id === 'cream' ? '1px solid #d6d3d1' : undefined }}
+              />
+            );
+          })}
+        </div>
+        {selectedColorId && (
+          <p className="mt-1.5 text-[11px] text-stone-500">
+            {COLOR_PALETTE.find(c => c.id === selectedColorId)?.name} 色系
+            <button onClick={() => setSelectedColorId(null)} className="ml-1.5 text-stone-400 hover:text-red-400">✕</button>
+          </p>
+        )}
+      </div>
 
       {/* 館別（可折疊） */}
       {availableBranches.length > 0 && (
         <div>
-          <h4 className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-stone-400 mb-2.5">
-            <MapPin size={11}/> 館別
+          <h4 className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-stone-500 mb-2.5">
+            <div className="w-6 h-6 rounded-lg bg-rose-100 flex items-center justify-center">
+              <MapPin size={11} className="text-rose-500"/>
+            </div>
+            館別
           </h4>
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             {visibleBranches.map(({ code, count }) => (
-              <label key={code} className="flex items-center gap-2 cursor-pointer group">
+              <label key={code}
+                className={`flex items-center gap-2.5 cursor-pointer p-2.5 rounded-xl transition-all duration-200
+                            hover:bg-stone-100 hover:scale-[1.02] hover:shadow-sm
+                            ${selectedBranches.includes(code) ? 'bg-stone-100 shadow-sm' : ''}`}
+              >
                 <input type="checkbox"
                   checked={selectedBranches.includes(code)}
                   onChange={e => {
@@ -325,10 +337,8 @@ function FilterSidebar({
                   }}
                   className="rounded accent-emerald-600 w-3.5 h-3.5 shrink-0"
                 />
-                <span className="text-sm text-stone-700 group-hover:text-stone-900 flex-1 leading-tight">
-                  {BRANCH_MAP[code] ?? code}
-                </span>
-                <span className="text-[11px] text-stone-400 shrink-0">{count}</span>
+                <span className="text-sm text-stone-700 flex-1 leading-tight">{BRANCH_MAP[code] ?? code}</span>
+                <span className="text-[11px] font-semibold text-stone-400 bg-stone-200/70 px-2 py-0.5 rounded-full tabular-nums shrink-0">{count}</span>
               </label>
             ))}
           </div>
@@ -336,15 +346,10 @@ function FilterSidebar({
           {availableBranches.length > BRANCH_COLLAPSED_COUNT && (
             <button
               onClick={() => setBranchesExpanded(v => !v)}
-              className="mt-2.5 flex items-center gap-1 text-[11px] text-emerald-600 hover:text-emerald-700 font-medium transition-colors"
+              className="mt-2 flex items-center gap-1 text-[11px] text-emerald-600 hover:text-emerald-700 font-medium transition-colors"
             >
-              <ChevronDown
-                size={12}
-                className={`transition-transform duration-200 ${branchesExpanded ? 'rotate-180' : ''}`}
-              />
-              {branchesExpanded
-                ? '收起'
-                : `顯示全部（${availableBranches.length} 間）`}
+              <ChevronDown size={12} className={`transition-transform duration-200 ${branchesExpanded ? 'rotate-180' : ''}`}/>
+              {branchesExpanded ? '收起' : `顯示全部（${availableBranches.length} 間）`}
             </button>
           )}
         </div>
@@ -415,6 +420,33 @@ export default function App() {
     setYearRange(monthYearBounds);
   }, [monthYearBounds[0], monthYearBounds[1]]);
 
+  // 以月份過濾後的書目計算語言/類型/館別數量
+  const monthAvailableLanguages = useMemo(() => {
+    const counts: Record<string, number> = {};
+    monthFilteredBooks.forEach(b => {
+      const lang = b.language || detectLanguage(b.isbn ?? '');
+      if (lang) counts[lang] = (counts[lang] ?? 0) + 1;
+    });
+    return Object.entries(counts)
+      .map(([code, count]) => ({ code, label: LANGUAGE_LABELS[code] ?? code, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [monthFilteredBooks]);
+
+  const monthAvailableMaterialTypes = useMemo(() => {
+    const counts: Record<string, number> = {};
+    monthFilteredBooks.forEach(b => { if (b.materialType) counts[b.materialType] = (counts[b.materialType] ?? 0) + 1; });
+    return Object.entries(counts).map(([code, count]) => ({ code, count })).sort((a, b) => b.count - a.count);
+  }, [monthFilteredBooks]);
+
+  const monthAvailableBranches = useMemo(() => {
+    const counts: Record<string, number> = {};
+    monthFilteredBooks.forEach(b => {
+      const brs = b.branches?.length ? b.branches : (b.branch ? [b.branch] : []);
+      brs.forEach(br => { counts[br] = (counts[br] ?? 0) + 1; });
+    });
+    return Object.entries(counts).map(([code, count]) => ({ code, count })).sort((a, b) => b.count - a.count);
+  }, [monthFilteredBooks]);
+
   // 以月份過濾後的書目計算分類數量
   const catCounts = useMemo(() => {
     const counts: Record<string, number> = { all: monthFilteredBooks.length };
@@ -469,7 +501,10 @@ export default function App() {
   }, [monthYearBounds]);
 
   const sidebarProps = {
-    yearBounds: monthYearBounds, availableLanguages, availableMaterialTypes, availableBranches,
+    yearBounds: monthYearBounds,
+    availableLanguages: monthAvailableLanguages,
+    availableMaterialTypes: monthAvailableMaterialTypes,
+    availableBranches: monthAvailableBranches,
     selectedLanguages, selectedMaterialTypes, selectedBranches, yearRange,
     setSelectedLanguages, setSelectedMaterialTypes, setSelectedBranches, setYearRange,
     selectedColorId, setSelectedColorId,
@@ -477,60 +512,43 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-900 font-sans">
+    <div className="min-h-screen bg-gradient-to-br from-stone-50 via-stone-50 to-emerald-50/40 text-stone-900 font-sans">
       {/* ── Header ── */}
-      <header className="bg-white border-b border-stone-200 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
+      <header className="bg-white/80 backdrop-blur-xl border-b border-stone-200/60 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 py-3.5 flex items-center justify-between gap-4">
+          {/* 左：Logo + 標題 */}
           <div className="flex items-center gap-3">
-            <div className="bg-emerald-600 p-2 rounded-lg text-white"><BookOpen size={22}/></div>
+            <div className="relative shrink-0">
+              <div className="bg-gradient-to-br from-emerald-500 via-teal-500 to-emerald-600 p-2.5 rounded-xl text-white shadow-lg shadow-emerald-500/30 transition-transform hover:scale-110 hover:rotate-3">
+                <BookOpen size={20}/>
+              </div>
+              <Sparkles size={13} className="absolute -top-1 -right-1 text-yellow-400 animate-pulse"/>
+            </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-stone-800">北圖本月新書通報</h1>
-              <p className="text-[11px] text-stone-400">免費的新書，最香 🌿</p>
+              <h1 className="text-xl font-extrabold bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-700 bg-clip-text text-transparent leading-tight tracking-tight">
+                北圖新書通報
+              </h1>
+              <p className="text-[11px] text-stone-400 hidden sm:block">
+                免費的新書，最香 <span className="inline-block animate-bounce">🌿</span>
+              </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 flex-1 max-w-sm ml-auto">
-            <button
-              onClick={() => setSidebarOpen(v => !v)}
-              className={`md:hidden flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium transition-all shrink-0 ${
-                activeFilterCount > 0 ? 'bg-emerald-600 text-white' : 'bg-stone-100 text-stone-600'
-              }`}
-            >
-              <Filter size={14}/>
-              {activeFilterCount > 0 && <span className="text-xs font-bold">{activeFilterCount}</span>}
-            </button>
-
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={16}/>
-              <input
-                type="text"
-                placeholder="搜尋書名、作者..."
-                className="w-full pl-9 pr-4 py-2 bg-stone-100 border-none rounded-full focus:ring-2 focus:ring-emerald-500 transition-all outline-none text-sm"
-                value={inputValue}
-                onChange={e => setInputValue(e.target.value)}
-              />
-            </div>
-          </div>
+          {/* 右：行動版篩選按鈕 */}
+          <button
+            onClick={() => setSidebarOpen(v => !v)}
+            className={`md:hidden flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium transition-all shrink-0 ${
+              activeFilterCount > 0
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-md'
+                : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+            }`}
+          >
+            <Filter size={14}/>
+            {activeFilterCount > 0 && <span className="text-xs font-bold">{activeFilterCount}</span>}
+          </button>
         </div>
       </header>
 
-      {/* 語義搜尋建議氣泡 */}
-      {isSearching && suggestions.length > 0 && (
-        <div className="bg-white border-b border-stone-100">
-          <div className="max-w-7xl mx-auto px-4 py-2 flex items-center gap-2 flex-wrap">
-            <span className="text-[11px] text-stone-400 shrink-0">也試試：</span>
-            {suggestions.map(s => (
-              <button
-                key={s}
-                onClick={() => { setInputValue(s); setSearchQuery(s); }}
-                className="px-3 py-0.5 rounded-full text-xs bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-colors"
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       <div className="max-w-7xl mx-auto px-4 py-6 flex gap-6 items-start">
 
@@ -568,22 +586,115 @@ export default function App() {
         {/* 右側主內容 */}
         <div className="flex-1 min-w-0">
 
+          {/* ── 搜尋列 ── */}
+          <div className="mb-6">
+            {/* 搜尋框 */}
+            <div className="flex items-center gap-0 bg-white border-2 border-stone-200
+                            rounded-2xl overflow-hidden shadow-sm
+                            focus-within:border-emerald-400 focus-within:shadow-md
+                            focus-within:shadow-emerald-500/10 transition-all duration-300">
+              {/* 左側圖示 */}
+              <div className="pl-1.5 shrink-0">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500
+                                flex items-center justify-center shadow shadow-emerald-400/30">
+                  <Search size={16} className="text-white"/>
+                </div>
+              </div>
+
+              {/* 輸入框 */}
+              <input
+                type="text"
+                placeholder="輸入情緒、主題、關鍵字…例如「發大財」"
+                className="flex-1 px-4 py-3 bg-transparent outline-none text-stone-800
+                           placeholder:text-stone-400 text-sm"
+                value={inputValue}
+                onChange={e => setInputValue(e.target.value)}
+                onKeyDown={e => e.key === 'Escape' && setInputValue('')}
+              />
+
+              {/* 清除按鈕 */}
+              {inputValue && (
+                <button onClick={() => setInputValue('')}
+                  className="px-3 text-stone-300 hover:text-stone-500 transition-colors shrink-0">
+                  <X size={16}/>
+                </button>
+              )}
+
+              {/* 搜尋按鈕 */}
+              <div className="pr-1.5 shrink-0">
+                <button
+                  onClick={() => setSearchQuery(inputValue)}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl
+                             bg-gradient-to-r from-emerald-500 to-teal-500 text-white
+                             text-sm font-semibold shadow shadow-emerald-400/30
+                             hover:shadow-md hover:shadow-emerald-500/25
+                             transition-all duration-200 active:scale-95"
+                >
+                  <Search size={14}/>
+                  搜尋
+                </button>
+              </div>
+            </div>
+
+            {/* 熱門標籤 / 搜尋建議 */}
+            <div className="mt-2.5 flex items-center gap-2 flex-wrap justify-center">
+              {isSearching && suggestions.length > 0 ? (
+                <>
+                  <span className="text-[11px] text-stone-400 shrink-0">也試試：</span>
+                  {suggestions.map(s => (
+                    <button key={s} onClick={() => { setInputValue(s); setSearchQuery(s); }}
+                      className="px-3 py-0.5 rounded-full text-xs bg-emerald-50 text-emerald-700
+                                 hover:bg-emerald-100 border border-emerald-200 transition-colors">
+                      {s}
+                    </button>
+                  ))}
+                </>
+              ) : !inputValue ? (
+                <>
+                  <span className="text-[11px] text-stone-400 shrink-0">試試看：</span>
+                  {['發大財', '心情不好', '職場壓力', '親子關係', '自我成長'].map(tag => (
+                    <button key={tag} onClick={() => setInputValue(tag)}
+                      className="px-3 py-0.5 rounded-full text-xs text-stone-500
+                                 bg-stone-100 hover:bg-emerald-50 hover:text-emerald-700
+                                 border border-stone-200 hover:border-emerald-200 transition-all">
+                      {tag}
+                    </button>
+                  ))}
+                </>
+              ) : null}
+            </div>
+          </div>
+
           {/* 月份 tabs */}
           {availableMonths.length > 0 && (
             <div className="flex items-center gap-2 mb-4 overflow-x-auto no-scrollbar pb-1">
               <CalendarDays size={14} className="text-stone-400 shrink-0"/>
               {availableMonths.map(m => {
                 const [y, mo] = m.split('-');
-                const label = `${y}年${parseInt(mo)}月`;
+                const moNum = parseInt(mo);
+                const label = `${y}年${moNum}月`;
+                const isActive = selectedMonth === m;
+                const MONTH_EMOJI: Record<number, [string, string]> = {
+                  1:  ['🎊', 'animate-bounce'],  2:  ['❄️', 'animate-spin'],
+                  3:  ['🌸', 'animate-bounce'],  4:  ['🌱', 'animate-pulse'],
+                  5:  ['🌻', 'animate-bounce'],  6:  ['☀️', 'animate-spin'],
+                  7:  ['🌊', 'animate-pulse'],   8:  ['🌟', 'animate-pulse'],
+                  9:  ['🍂', 'animate-bounce'],  10: ['🎃', 'animate-bounce'],
+                  11: ['🍁', 'animate-pulse'],   12: ['🎄', 'animate-bounce'],
+                };
+                const [emoji, aniClass] = MONTH_EMOJI[moNum] ?? ['📅', ''];
                 return (
                   <button key={m} onClick={() => setSelectedMonth(m)}
-                    className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
-                      selectedMonth === m
-                        ? 'bg-stone-800 text-white shadow-md'
-                        : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'
+                    className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium
+                                transition-all duration-300 whitespace-nowrap ${
+                      isActive
+                        ? 'bg-gradient-to-r from-stone-800 to-stone-700 text-white shadow-md shadow-stone-400/30'
+                        : 'bg-white/80 text-stone-600 hover:bg-white hover:shadow-sm border border-stone-200 hover:border-stone-300'
                     }`}
                   >
+                    <span className={`text-base leading-none ${isActive ? aniClass : ''}`}>{emoji}</span>
                     {label}
+                    {isActive && <span className="text-xs leading-none animate-pulse">✨</span>}
                   </button>
                 );
               })}
@@ -594,10 +705,10 @@ export default function App() {
           <div className="flex flex-wrap gap-2 mb-6 pb-1 overflow-x-auto no-scrollbar">
             {CATEGORIES.filter(c => (catCounts[c.id] ?? 0) > 0 || c.id === 'all').map(cat => (
               <button key={cat.id} onClick={() => setActiveCategory(cat.id)}
-                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300 whitespace-nowrap ${
                   activeCategory === cat.id
-                    ? 'bg-emerald-600 text-white shadow-md'
-                    : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-md shadow-emerald-500/25'
+                    : 'bg-white/80 text-stone-600 hover:bg-white hover:shadow-sm border border-stone-200 hover:border-emerald-200'
                 }`}
               >
                 {cat.name}
@@ -614,10 +725,15 @@ export default function App() {
           {!loading && !error && (
             <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
               <div className="flex items-center gap-3">
-                <p className="text-sm text-stone-500">
-                  共 <span className="font-semibold text-stone-700">{filteredBooks.length}</span> 本
-                  {activeFilterCount > 0 && <span className="text-stone-400 ml-1">（已篩選）</span>}
-                </p>
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-100 to-teal-100 flex items-center justify-center">
+                    <Sparkles size={14} className="text-emerald-600"/>
+                  </div>
+                  <p className="text-sm text-stone-500">
+                    共 <span className="font-bold text-xl bg-gradient-to-r from-emerald-600 to-teal-500 bg-clip-text text-transparent">{filteredBooks.length}</span> 本
+                    {activeFilterCount > 0 && <span className="text-stone-400 ml-1 text-xs">（已篩選）</span>}
+                  </p>
+                </div>
                 {isSearching && modelStatus === 'loading' && (
                   <span className="flex items-center gap-1.5 text-[11px] bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">
                     <Loader2 size={11} className="animate-spin"/> 語義模型載入中（首次需下載 ~100 MB）
@@ -639,10 +755,10 @@ export default function App() {
                       if (sortBy === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
                       else { setSortBy(key); setSortDir('desc'); }
                     }}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-300 ${
                       sortBy === key
-                        ? 'bg-stone-800 text-white'
-                        : 'bg-white text-stone-500 border border-stone-200 hover:border-stone-400'
+                        ? 'bg-gradient-to-r from-stone-800 to-stone-700 text-white shadow-sm'
+                        : 'bg-white/80 text-stone-500 border border-stone-200 hover:border-stone-400 hover:bg-white'
                     }`}
                   >
                     {label}
@@ -769,6 +885,8 @@ export default function App() {
           <BookModal book={selectedBook} onClose={() => setSelectedBook(null)}/>
         )}
       </AnimatePresence>
+
+      <PwaInstallBanner />
     </div>
   );
 }
