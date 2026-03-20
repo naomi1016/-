@@ -120,7 +120,7 @@ export function useIntentSuggestions(input: string) {
       } finally {
         if (!cancelled) setLoading(false);
       }
-    }, 450);
+    }, 700);
 
     return () => {
       cancelled = true;

@@ -706,6 +706,7 @@ export default function App() {
 
   const [inputValue,   setInputValue]             = useState('');
   const [searchQuery, setSearchQuery]             = useState('');
+  const [aiSearchQuery, setAiSearchQuery]         = useState('');
   const [activeCategory, setActiveCategory]       = useState('all');
   const [selectedBook, setSelectedBook]           = useState<Book | null>(null);
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
@@ -809,9 +810,9 @@ export default function App() {
   // AI 意圖預測（輸入時即時產生補全建議）
   const { suggestions: intentSuggestions, loading: intentLoading } = useIntentSuggestions(inputValue);
 
-  // AI 推薦原因（Gemini，靜默失敗）
+  // AI 推薦原因（Gemini，靜默失敗；只在按下搜尋鍵後觸發）
   const { reason: searchReason, loading: reasonLoading } = useSearchReason(
-    searchQuery,
+    aiSearchQuery,
     scoredBooks?.slice(0, 5) ?? [],
   );
 
@@ -864,7 +865,7 @@ export default function App() {
     selectedBranches.length + (yearActive ? 1 : 0) + (selectedColorId ? 1 : 0);
 
   const clearAllFilters = useCallback(() => {
-    setInputValue(''); setSearchQuery(''); setActiveCategory('all');
+    setInputValue(''); setSearchQuery(''); setAiSearchQuery(''); setActiveCategory('all');
     setSelectedLanguages([]); setSelectedMaterialTypes([]);
     setSelectedBranches([]); setYearRange(monthYearBounds);
     setSelectedColorId(null);
@@ -878,11 +879,12 @@ export default function App() {
 
   // Gemini AI 回應句（有 key 時非同步取得；無 key 則空字串，回退到 rule-based）
   const top3Books = useMemo(() => scoredBooks?.slice(0, 3) ?? [], [scoredBooks]);
-  const aiGeminiMessage = useAIResponseMessage(searchQuery, filteredBooks.length, top3Books);
-  const highlightedBibIds = useMemo(
-    () => new Set(isSearching ? top3Books.map(b => b.bibId).filter(Boolean) : []),
-    [isSearching, top3Books],
-  );
+  const aiGeminiMessage = useAIResponseMessage(aiSearchQuery, filteredBooks.length, top3Books);
+  const highlightedBibIds = useMemo(() => {
+    if (!isSearching) return new Set<string>();
+    const count = filteredBooks.length < 5 ? 1 : 3;
+    return new Set(top3Books.slice(0, count).map(b => b.bibId).filter(Boolean) as string[]);
+  }, [isSearching, filteredBooks.length, top3Books]);
   // 顯示優先：Gemini > rule-based > 不顯示
   const aiDisplayMessage = aiGeminiMessage || aiResponse?.message || '';
 
@@ -968,8 +970,13 @@ export default function App() {
       <div className="max-w-7xl mx-auto px-4 py-6 flex gap-6 items-start">
 
         {/* 桌面版左側欄 */}
-        <div className="hidden md:flex sticky top-[73px] self-start h-[calc(100vh-89px)] overflow-y-auto pb-4">
-          <FilterSidebar {...sidebarProps}/>
+        <div className="hidden md:flex sticky top-[73px] self-start h-[calc(100vh-89px)] relative">
+          <div className="overflow-y-auto pb-16 no-scrollbar h-full w-full">
+            <FilterSidebar {...sidebarProps}/>
+          </div>
+          {/* 底部毛玻璃感應帶 */}
+          <div className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none rounded-b-xl"
+               style={{ background: 'linear-gradient(to top, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.6) 50%, transparent 100%)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', maskImage: 'linear-gradient(to top, black 40%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to top, black 40%, transparent 100%)' }} />
         </div>
 
         {/* 行動版 overlay */}
@@ -1027,7 +1034,10 @@ export default function App() {
                            placeholder:text-stone-400 text-sm"
                 value={inputValue}
                 onChange={e => setInputValue(e.target.value)}
-                onKeyDown={e => e.key === 'Escape' && setInputValue('')}
+                onKeyDown={e => {
+                  if (e.key === 'Escape') setInputValue('');
+                  if (e.key === 'Enter') { setSearchQuery(inputValue); setAiSearchQuery(inputValue); }
+                }}
               />
 
               {/* 清除按鈕 */}
@@ -1041,7 +1051,7 @@ export default function App() {
               {/* 搜尋按鈕 */}
               <div className="pr-1.5 shrink-0">
                 <button
-                  onClick={() => setSearchQuery(inputValue)}
+                  onClick={() => { setSearchQuery(inputValue); setAiSearchQuery(inputValue); }}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-white
                              text-sm font-semibold shadow hover:shadow-md
                              transition-all duration-500 active:scale-95"
@@ -1234,7 +1244,8 @@ export default function App() {
           </div>
 
           {/* 桌機版橫向捲動 tabs */}
-          <div className="hidden sm:flex gap-2 mb-6 pb-1 overflow-x-auto no-scrollbar">
+          <div className="hidden sm:block relative mb-6 group/tabs">
+          <div className="flex gap-2 pb-2 overflow-x-auto no-scrollbar" id="cat-tabs">
             {CATEGORIES.filter(c => (catCounts[c.id] ?? 0) > 0 || c.id === 'all').map(cat => (
               <button key={cat.id} onClick={() => setActiveCategory(cat.id)}
                 className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300 whitespace-nowrap ${
@@ -1251,6 +1262,27 @@ export default function App() {
                 )}
               </button>
             ))}
+          </div>
+          {/* 左側箭頭 */}
+          <button
+            className="absolute left-0 top-0 bottom-2 w-10 flex items-center justify-start
+                       opacity-0 group-hover/tabs:opacity-100 transition-opacity duration-200
+                       pointer-events-auto"
+            style={{ background: 'linear-gradient(to right, rgba(249,250,251,0.95) 60%, transparent 100%)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }}
+            onClick={() => { const el = document.getElementById('cat-tabs'); if (el) el.scrollLeft -= 160; }}
+          >
+            <span className="text-stone-400 hover:text-emerald-500 transition-colors pl-1 text-lg">‹</span>
+          </button>
+          {/* 右側箭頭 */}
+          <button
+            className="absolute right-0 top-0 bottom-2 w-10 flex items-center justify-end
+                       opacity-0 group-hover/tabs:opacity-100 transition-opacity duration-200
+                       pointer-events-auto"
+            style={{ background: 'linear-gradient(to left, rgba(249,250,251,0.95) 60%, transparent 100%)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }}
+            onClick={() => { const el = document.getElementById('cat-tabs'); if (el) el.scrollLeft += 160; }}
+          >
+            <span className="text-stone-400 hover:text-emerald-500 transition-colors pr-1 text-lg">›</span>
+          </button>
           </div>
 
           {/* 狀態列＋排序 */}

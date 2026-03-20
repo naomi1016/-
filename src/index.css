@@ -1,1 +1,37 @@
 @import "tailwindcss";
+
+/* ── 全域 scrollbar 美化 ── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #10b981;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ── 隱藏 scrollbar（保留捲動功能） ── */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

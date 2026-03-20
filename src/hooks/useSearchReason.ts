@@ -30,7 +30,13 @@ export function useSearchReason(query: string, topBooks: Book[]) {
     setLoading(true);
     setReason('');
 
+    // 延遲 600ms，錯開與 useAIResponseMessage 的同時呼叫
+    const delayTimer = setTimeout(() => {}, 0); // placeholder
+    clearTimeout(delayTimer);
+
     (async () => {
+      await new Promise(resolve => setTimeout(resolve, 600));
+      if (abortRef.current) return;
       try {
         const genAI = new GoogleGenerativeAI(API_KEY);
         const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });

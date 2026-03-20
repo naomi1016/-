@@ -50,9 +50,19 @@ export default function BookModal({ book, onClose }: Props) {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 20, scale: 0.97 }}
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+        className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col"
         onClick={e => e.stopPropagation()}
       >
+        {/* ── 關閉按鈕（固定在 modal 右上角，不隨捲動移動） ── */}
+        <button onClick={onClose}
+          className="absolute top-4 right-4 z-20 bg-stone-800/70 hover:bg-stone-800/90 backdrop-blur-sm text-white rounded-full p-2 transition-colors shadow-md"
+        >
+          <X size={18}/>
+        </button>
+
+        {/* ── 捲動區域 ── */}
+        <div className="overflow-y-auto rounded-3xl">
+
         {/* ── 頂部封面橫幅 ── */}
         <div className="relative">
           <div className="h-32 bg-gradient-to-br from-emerald-500 to-teal-700 rounded-t-3xl" />
@@ -65,11 +75,6 @@ export default function BookModal({ book, onClose }: Props) {
               onError={e => { (e.target as HTMLImageElement).src = getCoverFallback(book); }}
             />
           </div>
-          <button onClick={onClose}
-            className="absolute top-4 right-4 bg-white/20 hover:bg-white/40 backdrop-blur-sm text-white rounded-full p-2 transition-colors"
-          >
-            <X size={18}/>
-          </button>
         </div>
 
         <div className="pt-16 px-6 pb-8 space-y-6">
@@ -117,6 +122,7 @@ export default function BookModal({ book, onClose }: Props) {
           )}
 
         </div>
+        </div>{/* 捲動區域結束 */}
       </motion.div>
     </motion.div>
   );
