@@ -54,3 +54,19 @@ export const CATEGORIES = [
 ];
 
 export const PAGE_SIZE = 60;
+
+export const COLOR_PALETTE = [
+  { id: 'red',     name: '紅',   rgb: [220,  50,  50] as [number,number,number] },
+  { id: 'orange',  name: '橙',   rgb: [230, 120,  40] as [number,number,number] },
+  { id: 'yellow',  name: '黃',   rgb: [220, 190,  50] as [number,number,number] },
+  { id: 'green',   name: '綠',   rgb: [ 60, 170,  80] as [number,number,number] },
+  { id: 'teal',    name: '青',   rgb: [ 40, 170, 160] as [number,number,number] },
+  { id: 'blue',    name: '藍',   rgb: [ 60, 130, 220] as [number,number,number] },
+  { id: 'navy',    name: '深藍', rgb: [ 30,  60, 140] as [number,number,number] },
+  { id: 'purple',  name: '紫',   rgb: [140,  80, 210] as [number,number,number] },
+  { id: 'pink',    name: '粉',   rgb: [230, 110, 170] as [number,number,number] },
+  { id: 'brown',   name: '棕',   rgb: [140,  85,  45] as [number,number,number] },
+  { id: 'cream',   name: '米白', rgb: [240, 230, 210] as [number,number,number] },
+  { id: 'gray',    name: '灰',   rgb: [150, 155, 160] as [number,number,number] },
+  { id: 'black',   name: '黑',   rgb: [ 40,  40,  45] as [number,number,number] },
+] as const;

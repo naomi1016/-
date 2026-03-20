@@ -25,3 +25,31 @@ export function getCategoryId(callNumber: string): string {
 
 export const getCoverFallback = (book: Book) =>
   `https://picsum.photos/seed/${encodeURIComponent(book.title)}/300/400`;
+
+/** Redmean 色彩感知距離（比純 Euclidean 更接近人眼感受） */
+export function colorDistance(
+  [r1, g1, b1]: [number, number, number],
+  [r2, g2, b2]: [number, number, number],
+): number {
+  const rMean = (r1 + r2) / 2;
+  const dr = r1 - r2, dg = g1 - g2, db = b1 - b2;
+  return Math.sqrt(
+    (2 + rMean / 256) * dr * dr +
+    4 * dg * dg +
+    (2 + (255 - rMean) / 256) * db * db,
+  );
+}
+
+/** 回傳與 coverColor 最接近的色板 ID */
+export function nearestPaletteId(
+  coverColor: [number, number, number],
+  palette: ReadonlyArray<{ id: string; rgb: [number, number, number] }>,
+): string {
+  let best = palette[0].id;
+  let bestDist = Infinity;
+  for (const { id, rgb } of palette) {
+    const d = colorDistance(coverColor, rgb);
+    if (d < bestDist) { bestDist = d; best = id; }
+  }
+  return best;
+}

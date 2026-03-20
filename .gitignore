@@ -5,3 +5,4 @@ public/neural_embeddings.json
 __pycache__/
 *.pyc
 .DS_Store
+/books.json

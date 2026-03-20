@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import type { Book } from '../types';
 import { LANGUAGE_LABELS, PAGE_SIZE } from '../constants';
-import { detectLanguage, getCategoryId } from '../utils';
+import { detectLanguage, getCategoryId, nearestPaletteId } from '../utils';
+import { COLOR_PALETTE } from '../constants';
 
 export type SortBy  = 'date' | 'year' | 'class';
 export type SortDir = 'asc' | 'desc';
@@ -15,6 +16,7 @@ export interface FilterState {
   yearRange: [number, number];
   sortBy:  SortBy;
   sortDir: SortDir;
+  selectedColorId: string | null; // 色系篩選
   isSemantic?: boolean; // 語義搜尋模式：輸入已排序，跳過文字搜尋與重新排序
 }
 
@@ -92,7 +94,7 @@ export function useFilteredBooks(books: Book[], filters: FilterState) {
   const [currentPage, setCurrentPage] = useState(1);
 
   const { searchQuery, activeCategory, selectedLanguages, selectedMaterialTypes,
-          selectedBranches, yearRange, sortBy, sortDir, isSemantic } = filters;
+          selectedBranches, yearRange, sortBy, sortDir, selectedColorId, isSemantic } = filters;
 
   useEffect(() => {
     setCurrentPage(1);
@@ -128,7 +130,13 @@ export function useFilteredBooks(books: Book[], filters: FilterState) {
       const y = book.publishYear;
       const matchYear = !y || (y >= yearRange[0] && y <= yearRange[1]);
 
-      return matchCat && matchLang && matchMat && matchBranch && matchYear;
+      const matchColor = !selectedColorId || (
+        book.coverColor
+          ? nearestPaletteId(book.coverColor, COLOR_PALETTE) === selectedColorId
+          : false
+      );
+
+      return matchCat && matchLang && matchMat && matchBranch && matchYear && matchColor;
     });
 
     // 語義搜尋模式：輸入已依相似度排序，不重新排列
@@ -167,7 +175,7 @@ export function useFilteredBooks(books: Book[], filters: FilterState) {
 
     return filtered;
   }, [books, searchQuery, activeCategory, selectedLanguages, selectedMaterialTypes,
-      selectedBranches, yearRange, sortBy, sortDir, isSemantic]);
+      selectedBranches, yearRange, sortBy, sortDir, selectedColorId, isSemantic]);
 
   const totalPages = Math.ceil(filteredBooks.length / PAGE_SIZE);
   const pagedBooks = useMemo(

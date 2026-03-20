@@ -12,7 +12,7 @@ import {
 import { AnimatePresence, motion } from 'motion/react';
 
 import type { Book } from './types';
-import { BRANCH_MAP, LANGUAGE_LABELS, CATEGORIES } from './constants';
+import { BRANCH_MAP, LANGUAGE_LABELS, CATEGORIES, COLOR_PALETTE } from './constants';
 import { getCategoryId } from './utils';
 import { useBooks, useFilteredBooks } from './hooks/useBooks';
 import type { SortBy, SortDir } from './hooks/useBooks';
@@ -127,6 +127,51 @@ function YearRangeSlider({
   );
 }
 
+// ── 色系選色器 ────────────────────────────────────────
+function ColorSwatchPicker({
+  selectedColorId,
+  setSelectedColorId,
+}: {
+  selectedColorId: string | null;
+  setSelectedColorId: React.Dispatch<React.SetStateAction<string | null>>;
+}) {
+  return (
+    <div>
+      <h4 className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-stone-400 mb-2.5">
+        🎨 封面色系
+      </h4>
+      <div className="grid grid-cols-6 gap-1.5">
+        {COLOR_PALETTE.map(({ id, name, rgb }) => {
+          const isSelected = selectedColorId === id;
+          return (
+            <button
+              key={id}
+              title={name}
+              onClick={() => setSelectedColorId(isSelected ? null : id)}
+              className={`w-7 h-7 rounded-full transition-all duration-150 ${
+                isSelected
+                  ? 'ring-2 ring-offset-1 ring-stone-600 scale-110'
+                  : 'hover:scale-110 hover:ring-1 hover:ring-stone-400 hover:ring-offset-1'
+              }`}
+              style={{ backgroundColor: `rgb(${rgb.join(',')})`,
+                       border: id === 'cream' ? '1px solid #d6d3d1' : undefined }}
+            />
+          );
+        })}
+      </div>
+      {selectedColorId && (
+        <p className="mt-1.5 text-[11px] text-stone-500">
+          {COLOR_PALETTE.find(c => c.id === selectedColorId)?.name} 色系
+          <button
+            onClick={() => setSelectedColorId(null)}
+            className="ml-1.5 text-stone-400 hover:text-red-400"
+          >✕</button>
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── 左側欄篩選元件 ────────────────────────────────────
 const BRANCH_COLLAPSED_COUNT = 5;
 
@@ -143,6 +188,8 @@ function FilterSidebar({
   setSelectedMaterialTypes,
   setSelectedBranches,
   setYearRange,
+  selectedColorId,
+  setSelectedColorId,
   activeFilterCount,
   clearAllFilters,
 }: {
@@ -158,6 +205,8 @@ function FilterSidebar({
   setSelectedMaterialTypes: React.Dispatch<React.SetStateAction<string[]>>;
   setSelectedBranches: React.Dispatch<React.SetStateAction<string[]>>;
   setYearRange: React.Dispatch<React.SetStateAction<[number, number]>>;
+  selectedColorId: string | null;
+  setSelectedColorId: React.Dispatch<React.SetStateAction<string | null>>;
   activeFilterCount: number;
   clearAllFilters: () => void;
 }) {
@@ -253,6 +302,12 @@ function FilterSidebar({
         </div>
       )}
 
+      {/* 色系 */}
+      <ColorSwatchPicker
+        selectedColorId={selectedColorId}
+        setSelectedColorId={setSelectedColorId}
+      />
+
       {/* 館別（可折疊） */}
       {availableBranches.length > 0 && (
         <div>
@@ -315,6 +370,7 @@ export default function App() {
   const [selectedBranches, setSelectedBranches]   = useState<string[]>([]);
   const [yearRange, setYearRange]                 = useState<[number, number]>(yearBounds);
   const [sidebarOpen, setSidebarOpen]             = useState(false);
+  const [selectedColorId, setSelectedColorId]     = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth]         = useState('all');
   const [sortBy,  setSortBy]                      = useState<SortBy>('date');
   const [sortDir, setSortDir]                     = useState<SortDir>('desc');
@@ -331,10 +387,7 @@ export default function App() {
     return months.sort().reverse();
   }, [books]);
 
-  // 書本載入後，以實際年份範圍初始化 yearRange，並預設顯示最新月份
-  useEffect(() => {
-    if (yearBounds[0] !== yearBounds[1]) setYearRange(yearBounds);
-  }, [yearBounds[0], yearBounds[1]]);
+  // 書本載入後，預設顯示最新月份
 
   useEffect(() => {
     if (availableMonths.length > 0 && selectedMonth === 'all') {
@@ -347,6 +400,20 @@ export default function App() {
     () => selectedMonth === 'all' ? books : books.filter(b => b.month === selectedMonth),
     [books, selectedMonth],
   );
+
+  // 依當月書目計算年份範圍
+  const monthYearBounds = useMemo((): [number, number] => {
+    const years = monthFilteredBooks
+      .map(b => b.publishYear)
+      .filter((y): y is number => typeof y === 'number');
+    if (!years.length) return yearBounds;
+    return [Math.min(...years), Math.max(...years)];
+  }, [monthFilteredBooks, yearBounds]);
+
+  // 月份切換時重設年份滑桿
+  useEffect(() => {
+    setYearRange(monthYearBounds);
+  }, [monthYearBounds[0], monthYearBounds[1]]);
 
   // 以月份過濾後的書目計算分類數量
   const catCounts = useMemo(() => {
@@ -381,6 +448,7 @@ export default function App() {
       searchQuery: isSearching ? '' : searchQuery, // 神經搜尋已排序，不重複文字搜尋
       activeCategory, selectedLanguages, selectedMaterialTypes, selectedBranches,
       yearRange, sortBy, sortDir,
+      selectedColorId,
       isSemantic: isSearching,
     },
   );
@@ -391,18 +459,20 @@ export default function App() {
   const yearActive = yearRange[0] !== yearBounds[0] || yearRange[1] !== yearBounds[1];
   const activeFilterCount =
     selectedLanguages.length + selectedMaterialTypes.length +
-    selectedBranches.length + (yearActive ? 1 : 0);
+    selectedBranches.length + (yearActive ? 1 : 0) + (selectedColorId ? 1 : 0);
 
   const clearAllFilters = useCallback(() => {
     setInputValue(''); setSearchQuery(''); setActiveCategory('all');
     setSelectedLanguages([]); setSelectedMaterialTypes([]);
-    setSelectedBranches([]); setYearRange(yearBounds);
-  }, [yearBounds]);
+    setSelectedBranches([]); setYearRange(monthYearBounds);
+    setSelectedColorId(null);
+  }, [monthYearBounds]);
 
   const sidebarProps = {
-    yearBounds, availableLanguages, availableMaterialTypes, availableBranches,
+    yearBounds: monthYearBounds, availableLanguages, availableMaterialTypes, availableBranches,
     selectedLanguages, selectedMaterialTypes, selectedBranches, yearRange,
     setSelectedLanguages, setSelectedMaterialTypes, setSelectedBranches, setYearRange,
+    selectedColorId, setSelectedColorId,
     activeFilterCount, clearAllFilters,
   };
 

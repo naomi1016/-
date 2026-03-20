@@ -34,6 +34,13 @@ export default function BookCard({ book, onClick }: Props) {
             {Math.round(book._score * 100)}%
           </div>
         )}
+        {book.coverColor && (
+          <div
+            className="absolute bottom-2 left-2 w-3.5 h-3.5 rounded-full border-2 border-white/80 shadow"
+            style={{ backgroundColor: `rgb(${book.coverColor.join(',')})` }}
+            title="封面主色"
+          />
+        )}
       </div>
 
       <h3 className="font-bold text-stone-800 line-clamp-2 mb-2 leading-tight group-hover:text-emerald-700 transition-colors">
