@@ -7,7 +7,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   Search, BookOpen, Filter, Sparkles,
   X, Loader2, CalendarDays,
-  AlertCircle, RefreshCw, Globe, MapPin, ChevronDown, BookText, Palette, Shuffle,
+  AlertCircle, RefreshCw, Globe, MapPin, ChevronDown, BookText, Palette,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
@@ -962,11 +962,11 @@ export default function App() {
               <Sparkles size={13} className="absolute -top-1 -right-1 text-yellow-400 animate-pulse"/>
             </div>
             <div>
-              <h1 className="text-xl font-extrabold bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-700 bg-clip-text text-transparent leading-tight tracking-tight">
-                北圖新書通報
+              <h1 className="text-base font-extrabold bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-700 bg-clip-text text-transparent leading-tight tracking-tight">
+                遇見 (Serendipity)・北市圖新書導航
               </h1>
               <p className="text-[11px] text-stone-400 hidden sm:block">
-                免費的新書，最香 <span className="inline-block animate-bounce">🌿</span>
+                你的靈魂伴侶已上線，而且完全不用錢😎
               </p>
             </div>
           </div>
@@ -977,8 +977,8 @@ export default function App() {
               onClick={() => setBlindBoxOpen(true)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium bg-gradient-to-r from-amber-400 to-orange-400 text-white shadow-sm hover:shadow-md transition-all active:scale-95"
             >
-              <Shuffle size={14}/>
-              <span className="hidden sm:inline">隨機驚喜</span>
+              <Sparkles size={14}/>
+              <span className="hidden sm:inline">抽一張 SSR 靈魂伴侶 🃏</span>
             </button>
             <button
               onClick={() => setSidebarOpen(v => !v)}

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Shuffle } from 'lucide-react';
+import { X, Sparkles } from 'lucide-react';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { Book } from '../types';
 import { getCoverFallback } from '../utils';
@@ -146,8 +146,8 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
             <X size={18} />
           </button>
           <div className="flex items-center gap-2 mb-0.5">
-            <Shuffle size={17} />
-            <span className="font-bold text-lg tracking-tight">盲盒選書</span>
+            <Sparkles size={17} />
+            <span className="font-bold text-lg tracking-tight">抽一張 SSR 靈魂伴侶 🃏</span>
           </div>
           <p className="text-white/80 text-sm">
             {phase === 'done' ? '命運已定！' : phase === 'slowing' ? '即將揭曉…' : '書海茫茫，為你抽一本…'}
@@ -243,9 +243,14 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
 
           {/* 滾動中提示 */}
           {phase !== 'done' && (
-            <p className="text-stone-400 text-sm animate-pulse h-6">
-              {phase === 'slowing' ? '即將揭曉…' : '書海尋緣中…'}
-            </p>
+            <div className="flex flex-col items-center gap-1">
+              <p className="text-stone-400 text-sm animate-pulse">
+                {phase === 'slowing' ? '即將揭曉…' : '書海尋緣中…'}
+              </p>
+              <p className="text-stone-300 text-[11px]">
+                AI 正在讀取你的腦波…（其實只是在算數學）
+              </p>
+            </div>
           )}
         </div>
       </motion.div>
