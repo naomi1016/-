@@ -27,7 +27,11 @@ export function useAIResponseMessage(query: string, resultCount: number, topBook
     (async () => {
       try {
         const genAI = new GoogleGenerativeAI(API_KEY);
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+        // gemini-2.5-flash + thinkingBudget:0：關閉思考模式，速度與 2.0-flash 相近但免費額度更高
+        const model = genAI.getGenerativeModel({
+          model: 'gemini-2.5-flash',
+          generationConfig: { thinkingConfig: { thinkingBudget: 0 } } as never,
+        });
 
         const top3 = topBooks.slice(0, 3);
         const bookHint = top3.length > 0
@@ -42,14 +46,15 @@ export function useAIResponseMessage(query: string, resultCount: number, topBook
           `嚴格限制：只能推薦上方書單內的書，不得自行編造書名。\n` +
           `要求：語氣活潑真誠、繁體中文、全文 50 字以內、不加標題或編號。`;
 
-        const result = await model.generateContent(prompt);
-        if (abortRef.current) return;
-
-        const text = result.response.text().trim();
-        if (text) {
-          cache.set(cacheKey, text);
-          setAiMessage(text);
+        // 串流輸出：文字逐字出現，體感更快
+        const stream = await model.generateContentStream(prompt);
+        let full = '';
+        for await (const chunk of stream.stream) {
+          if (abortRef.current) return;
+          full += chunk.text();
+          setAiMessage(full);
         }
+        if (full) cache.set(cacheKey, full);
       } catch (err) {
         console.error('[useAIResponseMessage] Gemini error:', err);
       }

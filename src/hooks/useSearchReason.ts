@@ -30,16 +30,14 @@ export function useSearchReason(query: string, topBooks: Book[]) {
     setLoading(true);
     setReason('');
 
-    // 延遲 600ms，錯開與 useAIResponseMessage 的同時呼叫
-    const delayTimer = setTimeout(() => {}, 0); // placeholder
-    clearTimeout(delayTimer);
-
     (async () => {
-      await new Promise(resolve => setTimeout(resolve, 600));
-      if (abortRef.current) return;
       try {
         const genAI = new GoogleGenerativeAI(API_KEY);
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+        // gemini-2.5-flash + thinkingBudget:0：關閉思考模式，速度與 2.0-flash 相近但免費額度更高
+        const model = genAI.getGenerativeModel({
+          model: 'gemini-2.5-flash',
+          generationConfig: { thinkingConfig: { thinkingBudget: 0 } } as never,
+        });
 
         const bookList = topBooks
           .slice(0, 5)
@@ -55,13 +53,15 @@ export function useSearchReason(query: string, topBooks: Book[]) {
           `請用一句話（35字以內）說明這些書為何能回應使用者的需求或情緒，` +
           `語氣自然親切，不要列舉書名，以「這幾本書」開頭。`;
 
-        const result = await model.generateContent(prompt);
-
-        if (abortRef.current) return;
-
-        const text = result.response.text().trim();
-        reasonCache.set(q, text);
-        setReason(text);
+        // 串流輸出：文字逐字出現，體感更快
+        const stream = await model.generateContentStream(prompt);
+        let full = '';
+        for await (const chunk of stream.stream) {
+          if (abortRef.current) return;
+          full += chunk.text();
+          setReason(full);
+        }
+        reasonCache.set(q, full);
       } catch {
         // 靜默失敗：API key 無效或網路問題時不顯示任何內容
       } finally {

@@ -1,8 +1,10 @@
-import { X, User, Hash, Calendar, BookOpen } from 'lucide-react';
-import { motion } from 'motion/react';
+import { useState } from 'react';
+import { X, User, Hash, Calendar, BookOpen, LibraryBig, Loader2, ChevronDown, ExternalLink } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import type { Book } from '../types';
-import { CATEGORIES } from '../constants';
+import { CATEGORIES, BRANCH_MAP } from '../constants';
 import { getCategoryId, getCoverFallback } from '../utils';
+import { useAvailability } from '../hooks/useAvailability';
 
 interface Props {
   book: Book;
@@ -38,6 +40,11 @@ export default function BookModal({ book, onClose }: Props) {
   const catName = CATEGORIES.find(c => c.id === getCategoryId(book.callNumber))?.name ?? '其他';
   const noDescMsg = getNoDescMessage(book.bibId);
   const hasContent = !!(book.description || book.authorDesc);
+
+  const { data: avail, status: availStatus } = useAvailability(book.bibId, true);
+  const [branchOpen, setBranchOpen] = useState(false);
+  const hasBranches = avail && avail.onShelf > 0 && Object.keys(avail.branches).length > 0;
+  const tpmlUrl = `https://book.tpml.edu.tw/bookDetail/${book.bibId}`;
 
   return (
     <motion.div
@@ -120,6 +127,125 @@ export default function BookModal({ book, onClose }: Props) {
               <Paragraphs text={book.authorDesc} />
             </div>
           )}
+
+          {/* ── 館藏狀態 ── */}
+          <div className="rounded-2xl border border-stone-100 overflow-hidden">
+            <div className="px-5 py-3.5 bg-stone-50 flex items-center gap-2 border-b border-stone-100">
+              <LibraryBig size={13} className="text-stone-400"/>
+              <span className="text-[11px] font-bold uppercase tracking-widest text-stone-400">館藏狀態</span>
+            </div>
+
+            <AnimatePresence mode="wait">
+              {availStatus === 'loading' && (
+                <motion.div key="loading"
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  className="flex items-center justify-center gap-2 py-6 text-stone-400 text-sm"
+                >
+                  <Loader2 size={15} className="animate-spin"/>
+                  查詢館藏中…
+                </motion.div>
+              )}
+
+              {availStatus === 'error' && (
+                <motion.div key="error"
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  className="py-5 px-5 text-stone-400 text-sm text-center"
+                >
+                  暫時無法取得館藏資訊
+                </motion.div>
+              )}
+
+              {availStatus === 'ok' && avail && (
+                <motion.div key="ok"
+                  initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                  className="px-5 py-4 space-y-3"
+                >
+                  {/* 數字概覽 */}
+                  <div className="grid grid-cols-3 gap-3">
+                    {/* 在架可借：可點擊展開分館 */}
+                    <button
+                      onClick={() => hasBranches && setBranchOpen(v => !v)}
+                      className={`text-center rounded-xl py-3 transition-all ${
+                        hasBranches
+                          ? 'bg-emerald-50 hover:bg-emerald-100 cursor-pointer active:scale-95'
+                          : 'bg-emerald-50 cursor-default'
+                      }`}
+                    >
+                      <p className="text-2xl font-bold text-emerald-600">{avail.onShelf}</p>
+                      <p className="text-[11px] text-emerald-600/70 mt-0.5 flex items-center justify-center gap-0.5">
+                        在架可借
+                        {hasBranches && (
+                          <ChevronDown size={10} className={`transition-transform ${branchOpen ? 'rotate-180' : ''}`}/>
+                        )}
+                      </p>
+                    </button>
+
+                    <div className="text-center rounded-xl bg-amber-50 py-3">
+                      <p className="text-2xl font-bold text-amber-500">{avail.checkedOut}</p>
+                      <p className="text-[11px] text-amber-500/70 mt-0.5">已借出</p>
+                    </div>
+                    <div className="text-center rounded-xl bg-stone-50 py-3">
+                      <p className="text-2xl font-bold text-stone-500">{avail.total}</p>
+                      <p className="text-[11px] text-stone-400 mt-0.5">館藏總數</p>
+                    </div>
+                  </div>
+
+                  {/* 在架分館列表（展開/收合） */}
+                  <AnimatePresence>
+                    {branchOpen && hasBranches && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="pt-1 pb-1">
+                          <p className="text-[11px] text-stone-400 font-medium mb-2">在架分館</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {Object.entries(avail.branches).map(([code, count]) => (
+                              <span key={code}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium border border-emerald-100"
+                              >
+                                {BRANCH_MAP[code] ?? code}
+                                {count > 1 && (
+                                  <span className="bg-emerald-500 text-white rounded-full text-[10px] w-4 h-4 flex items-center justify-center">
+                                    {count}
+                                  </span>
+                                )}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* 最近還書日 */}
+                  {avail.onShelf === 0 && avail.recentDueDate && (
+                    <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 text-center">
+                      最近歸還日：{avail.recentDueDate}
+                    </p>
+                  )}
+
+                  {/* 預約按鈕 */}
+                  {book.bibId && (
+                    <a
+                      href={tpmlUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl
+                                 bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-sm font-semibold
+                                 shadow hover:shadow-md transition-all active:scale-95"
+                    >
+                      <ExternalLink size={14}/>
+                      前往北圖預約
+                    </a>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
         </div>
         </div>{/* 捲動區域結束 */}

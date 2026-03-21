@@ -7,7 +7,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   Search, BookOpen, Filter, Sparkles,
   X, Loader2, CalendarDays,
-  AlertCircle, RefreshCw, Globe, MapPin, ChevronDown, BookText, Palette,
+  AlertCircle, RefreshCw, Globe, MapPin, ChevronDown, BookText, Palette, Shuffle,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
@@ -23,6 +23,7 @@ import { useIntentSuggestions } from './hooks/useIntentSuggestions';
 import { useAIResponseMessage } from './hooks/useAIResponseMessage';
 import BookCard from './components/BookCard';
 import BookModal from './components/BookModal';
+import BlindBoxModal from './components/BlindBoxModal';
 import PwaInstallBanner from './components/PwaInstallBanner';
 
 // ── 出版年份區間滑桿 ──────────────────────────────────
@@ -714,6 +715,8 @@ export default function App() {
   const [selectedBranches, setSelectedBranches]   = useState<string[]>([]);
   const [yearRange, setYearRange]                 = useState<[number, number]>(yearBounds);
   const [sidebarOpen, setSidebarOpen]             = useState(false);
+  const [blindBoxOpen, setBlindBoxOpen]           = useState(false);
+  const [blindBoxKey, setBlindBoxKey]             = useState(0);
   const [selectedColorId, setSelectedColorId]     = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth]         = useState('all');
   const [sortBy,  setSortBy]                      = useState<SortBy>('date');
@@ -879,12 +882,16 @@ export default function App() {
 
   // Gemini AI 回應句（有 key 時非同步取得；無 key 則空字串，回退到 rule-based）
   const top3Books = useMemo(() => scoredBooks?.slice(0, 3) ?? [], [scoredBooks]);
-  const aiGeminiMessage = useAIResponseMessage(aiSearchQuery, filteredBooks.length, top3Books);
+  // 結果少於 5 本時只推薦 1 本，AI 訊息與緞帶標示保持一致
+  const aiTopBooks = useMemo(() => {
+    const count = filteredBooks.length < 5 ? 1 : 3;
+    return top3Books.slice(0, count);
+  }, [top3Books, filteredBooks.length]);
+  const aiGeminiMessage = useAIResponseMessage(aiSearchQuery, filteredBooks.length, aiTopBooks);
   const highlightedBibIds = useMemo(() => {
     if (!isSearching) return new Set<string>();
-    const count = filteredBooks.length < 5 ? 1 : 3;
-    return new Set(top3Books.slice(0, count).map(b => b.bibId).filter(Boolean) as string[]);
-  }, [isSearching, filteredBooks.length, top3Books]);
+    return new Set(aiTopBooks.map(b => b.bibId).filter(Boolean) as string[]);
+  }, [isSearching, aiTopBooks]);
   // 顯示優先：Gemini > rule-based > 不顯示
   const aiDisplayMessage = aiGeminiMessage || aiResponse?.message || '';
 
@@ -894,6 +901,11 @@ export default function App() {
     : null;
   const moodThemeColor = useMemo(() => getMoodThemeColor(searchQuery), [searchQuery]);
   const activeThemeColor: [number, number, number] | null = selectedColorRgb ?? moodThemeColor;
+
+  // 色系篩選啟動時，「清除篩選」按鈕文字改為對應深色版，引導使用者發現重置
+  const clearBtnColor = selectedColorRgb
+    ? `rgb(${selectedColorRgb.map(c => Math.round(c * 0.55)).join(',')})`
+    : null;
 
   // 同步 CSS 變數到 :root，讓外部 CSS 也可引用
   useEffect(() => {
@@ -959,18 +971,27 @@ export default function App() {
             </div>
           </div>
 
-          {/* 右：行動版篩選按鈕 */}
-          <button
-            onClick={() => setSidebarOpen(v => !v)}
-            className={`md:hidden flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium transition-all shrink-0 ${
-              activeFilterCount > 0
-                ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-md'
-                : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-            }`}
-          >
-            <Filter size={14}/>
-            {activeFilterCount > 0 && <span className="text-xs font-bold">{activeFilterCount}</span>}
-          </button>
+          {/* 右：隨機驚喜 + 行動版篩選按鈕 */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setBlindBoxOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium bg-gradient-to-r from-amber-400 to-orange-400 text-white shadow-sm hover:shadow-md transition-all active:scale-95"
+            >
+              <Shuffle size={14}/>
+              <span className="hidden sm:inline">隨機驚喜</span>
+            </button>
+            <button
+              onClick={() => setSidebarOpen(v => !v)}
+              className={`md:hidden flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium transition-all ${
+                activeFilterCount > 0
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-md'
+                  : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+              }`}
+            >
+              <Filter size={14}/>
+              {activeFilterCount > 0 && <span className="text-xs font-bold">{activeFilterCount}</span>}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -1344,7 +1365,8 @@ export default function App() {
 
                 {activeFilterCount > 0 && (
                   <button onClick={clearAllFilters}
-                    className="ml-1 text-xs text-stone-400 hover:text-red-500 flex items-center gap-1 transition-colors"
+                    className="ml-1 text-xs text-stone-400 flex items-center gap-1 transition-colors hover:opacity-70"
+                    style={clearBtnColor ? { color: clearBtnColor } : undefined}
                   >
                     <X size={11}/> 清除篩選
                   </button>
@@ -1510,6 +1532,18 @@ export default function App() {
       <AnimatePresence>
         {selectedBook && (
           <BookModal book={selectedBook} onClose={() => setSelectedBook(null)}/>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {blindBoxOpen && monthFilteredBooks.length > 0 && (
+          <BlindBoxModal
+            key={blindBoxKey}
+            books={monthFilteredBooks}
+            onClose={() => setBlindBoxOpen(false)}
+            onOpenBook={book => setSelectedBook(book)}
+            onReroll={() => setBlindBoxKey(k => k + 1)}
+          />
         )}
       </AnimatePresence>
 
