@@ -901,9 +901,17 @@ export default function App() {
     if (activeThemeColor) {
       root.style.setProperty('--theme-color', `rgb(${activeThemeColor.join(',')})`);
       root.style.setProperty('--theme-color-raw', activeThemeColor.join(','));
+      // 極淡版（10% 色彩 + 90% 白）→ 沉浸式背景
+      const [r, g, b] = activeThemeColor;
+      const lr = Math.round(255 + (r - 255) * 0.10);
+      const lg = Math.round(255 + (g - 255) * 0.10);
+      const lb = Math.round(255 + (b - 255) * 0.10);
+      const hex = `#${lr.toString(16).padStart(2,'0')}${lg.toString(16).padStart(2,'0')}${lb.toString(16).padStart(2,'0')}`;
+      document.body.style.backgroundColor = hex;
     } else {
       root.style.removeProperty('--theme-color');
       root.style.removeProperty('--theme-color-raw');
+      document.body.style.backgroundColor = '#F9FAFB';
     }
   }, [activeThemeColor]);
 
@@ -929,7 +937,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-stone-50 via-stone-50 to-emerald-50/40 text-stone-900 font-sans">
+    <div className="min-h-screen bg-transparent text-stone-900 font-sans">
       {/* ── Header ── */}
       <header className="bg-white/80 backdrop-blur-xl border-b border-stone-200/60 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-3.5 flex items-center justify-between gap-4">
