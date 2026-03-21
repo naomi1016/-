@@ -13,6 +13,10 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 const GQL_URL  = 'https://book.tpml.edu.tw/api/HyLibWS/graphql';
 const BASE_URL = 'https://book.tpml.edu.tw';
 
+// Server-side 快取：同一 bibId 5 分鐘內不重複打北圖 API
+const TTL_MS = 5 * 60 * 1000;
+const serverCache = new Map<string, { data: unknown; expiry: number }>();
+
 const GQL_QUERY = `
 query getByMarcId($marcId: Int, $skip: Int, $take: Int, $isPM: Boolean) {
   callVolHoldSummaries: getCallVolHoldSummariesByMarcId(
@@ -79,6 +83,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'bibId 必填' });
   }
 
+  // 快取命中：直接回傳，跳過所有 HTTP 請求
+  const cached = serverCache.get(bibId);
+  if (cached && Date.now() < cached.expiry) {
+    res.setHeader('X-Cache', 'HIT');
+    return res.status(200).json(cached.data);
+  }
+
   // 1. 取 session
   const session = await getSession(bibId);
   if (!session) {
@@ -122,14 +133,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    return res.status(200).json({
+    const result = {
       total:         item.holdNum      ?? 0,
       onShelf:       item.onShelveNum  ?? 0,
       checkedOut:    item.checkoutNum  ?? 0,
       other:         item.otherNum     ?? 0,
       recentDueDate: item.recentDueDate ?? '',
-      branches:      branchCount, // { "A14": 1, "H15": 2, ... }
-    });
+      branches:      branchCount,
+    };
+
+    // 寫入 server-side 快取（5 分鐘）
+    serverCache.set(bibId, { data: result, expiry: Date.now() + TTL_MS });
+    res.setHeader('X-Cache', 'MISS');
+    return res.status(200).json(result);
   } catch (err) {
     return res.status(500).json({ error: String(err) });
   }
