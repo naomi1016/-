@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Sparkles, Copy, Check, Camera, Loader2 } from 'lucide-react';
+import { X, Sparkles, Check, Camera, Loader2 } from 'lucide-react';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { Book } from '../types';
 import { getCoverFallback } from '../utils';
@@ -254,31 +254,32 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
         if (!blob) throw new Error('canvas failed');
         const file = new File([blob], 'serendipity-book.png', { type: 'image/png' });
         if (navigator.canShare?.({ files: [file] })) {
-          await navigator.share({ files: [file], title: chosenBook.title, text });
+          // 行動裝置：原生分享選單（圖片＋文字＋連結）
+          await navigator.share({ files: [file], title: chosenBook.title, text: `${text}\n${url}` });
         } else {
-          // Fallback: download image
+          // 桌面 fallback：下載圖片＋複製文字連結到剪貼簿
+          const objUrl = URL.createObjectURL(blob);
           const a = document.createElement('a');
-          a.href = URL.createObjectURL(blob);
+          a.href = objUrl;
           a.download = 'serendipity-book.png';
-          a.click(); URL.revokeObjectURL(a.href);
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
+          try {
+            await navigator.clipboard.writeText(`${text}\n${url}`);
+          } catch {
+            const ta = document.createElement('textarea');
+            ta.value = `${text}\n${url}`;
+            document.body.appendChild(ta); ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+          }
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2500);
         }
-      } catch { /* user cancelled or not supported */ }
+      } catch { /* user cancelled */ }
       finally { setSharing(false); }
-      return;
-    }
-
-    if (platform === 'copy') {
-      try {
-        await navigator.clipboard.writeText(`${text}\n${url}`);
-      } catch {
-        const ta = document.createElement('textarea');
-        ta.value = `${text}\n${url}`;
-        document.body.appendChild(ta); ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-      }
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
       return;
     }
 
@@ -398,15 +399,18 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
                 <div className="space-y-2">
                   <p className="text-stone-400 text-[11px] text-center">分享這本命運之書</p>
 
-                  {/* 截圖分享：主要按鈕 */}
+                  {/* 截圖分享：主要按鈕（含連結）*/}
                   <button
                     onClick={() => handleShare('screenshot')}
                     disabled={sharing}
-                    className="w-full py-2 rounded-xl bg-gradient-to-r from-amber-400 to-orange-400 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-95 disabled:opacity-60"
+                    className={`w-full py-2 rounded-xl text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-95 disabled:opacity-60
+                      ${copied ? 'bg-emerald-500' : 'bg-gradient-to-r from-amber-400 to-orange-400'}`}
                   >
                     {sharing
                       ? <><Loader2 size={13} className="animate-spin" /> 生成中…</>
-                      : <><Camera size={13} /> 截圖分享</>
+                      : copied
+                        ? <><Check size={13} /> 已下載並複製連結！</>
+                        : <><Camera size={13} /> 截圖分享</>
                     }
                   </button>
 
@@ -447,19 +451,6 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
                       <svg viewBox="0 0 192 192" className="w-5 h-5 fill-white">
                         <path d="M141.537 88.988a66.667 66.667 0 00-2.518-1.143c-1.482-27.307-16.403-42.94-41.457-43.1h-.34c-14.986 0-27.449 6.396-35.12 18.036l13.779 9.452c5.73-8.695 14.724-10.548 21.348-10.548h.23c8.248.054 14.474 2.499 18.515 7.264 2.902 3.477 4.846 8.288 5.798 14.393-7.635-1.298-15.876-1.696-24.682-1.19-24.826 1.43-40.797 15.913-39.795 36.03.503 10.17 5.545 18.927 14.206 24.654 7.322 4.879 16.739 7.266 26.548 6.724 12.985-.705 23.199-5.596 30.368-14.54 5.447-6.844 8.895-15.712 10.464-27.073 6.273 3.782 10.928 8.661 13.442 14.542 4.208 9.927 4.448 26.228-8.683 39.361-11.503 11.503-25.319 16.463-46.22 16.615-23.167-.173-40.778-7.5-52.36-21.793C29.748 131.51 24.02 112.627 23.808 88c.212-24.627 5.94-43.51 17.157-56.13C52.52 17.717 70.13 10.39 93.297 10.218c23.343.174 41.13 7.535 52.85 21.887 5.746 7.07 10.028 15.96 12.816 26.48l16.149-4.348c-3.441-12.71-8.878-23.668-16.268-32.788C143.935 5.94 121.744-2.131 93.508 0h-.238C65.08-.132 43.1 7.851 27.85 23.725 14.397 37.773 7.442 57.61 7.208 82.712L7.2 83.2v.8c.003 25.104 6.953 44.966 20.617 59.032C43.099 158.81 65.095 166.972 93.37 167.2h.238c22.738 0 38.71-6.11 51.9-19.298 17.55-17.553 17.026-39.648 11.291-53.161-4.087-9.64-11.826-17.48-15.262-19.753z"/>
                       </svg>
-                    </button>
-
-                    {/* 複製連結 */}
-                    <button
-                      onClick={() => handleShare('copy')}
-                      title="複製連結"
-                      className={`w-9 h-9 rounded-full flex items-center justify-center shadow-sm transition-all active:scale-90 hover:scale-105
-                        ${copied ? 'bg-emerald-500' : 'bg-stone-200 hover:bg-stone-300'}`}
-                    >
-                      {copied
-                        ? <Check size={16} className="text-white" />
-                        : <Copy size={16} className="text-stone-600" />
-                      }
                     </button>
                   </div>
                 </div>
