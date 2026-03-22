@@ -274,27 +274,30 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
       if (!blob) throw new Error('canvas failed');
       const file = new File([blob], 'serendipity-book.png', { type: 'image/png' });
 
-      // 行動裝置：原生分享選單（圖片＋文字＋連結）
+      // 有指定平台（LINE/FB/Threads）→ 直接下載圖片 + 開啟平台網址
+      // 截圖分享（platform === 'screenshot'）且在行動裝置 → 原生分享選單
+      const isMobile = navigator.maxTouchPoints > 1;
       let nativeShared = false;
-      if (navigator.canShare?.({ files: [file] })) {
+
+      if (platform === 'screenshot' && isMobile && navigator.canShare?.({ files: [file] })) {
         try {
           await navigator.share({ files: [file], title: chosenBook.title, text: fullText });
           nativeShared = true;
         } catch (err) {
           if (err instanceof Error && err.name === 'AbortError') return; // 使用者取消
-          // NotSupportedError 等 → 降級到下載
+          // 其他錯誤 → 降級到下載
         }
       }
 
       if (!nativeShared) {
-        // 桌面 fallback：下載圖片
+        // 下載圖片（桌面 fallback，或平台按鈕）
         const objUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = objUrl; a.download = 'serendipity-book.png';
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
 
-        // 各平台按鈕：另開平台分享頁
+        // 各平台按鈕：另開平台分享頁（直接跳轉）
         if (platformUrls[platform]) {
           window.open(platformUrls[platform], '_blank', 'noopener,noreferrer');
         }
