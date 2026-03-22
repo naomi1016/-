@@ -275,16 +275,24 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
       if (!blob) throw new Error('canvas failed');
       const file = new File([blob], 'serendipity-book.png', { type: 'image/png' });
 
-      // 有指定平台（LINE/FB/Threads）→ 直接下載圖片 + 開啟平台網址
-      // 截圖分享（platform === 'screenshot'）且在行動裝置 → 原生分享選單
       const isMobile = navigator.maxTouchPoints > 1;
       let nativeShared = false;
 
-      if (platform === 'screenshot' && isMobile && navigator.canShare?.({ files: [file] })) {
+      if (isMobile && navigator.canShare?.({ files: [file] })) {
+        // 手機：原生分享選單讓使用者儲存圖片到相簿
+        // 截圖分享 → 帶 text；平台按鈕 → 分享後另開平台網址
         try {
-          await navigator.share({ files: [file], title: chosenBook.title, text: fullText });
+          await navigator.share({
+            files: [file],
+            title: chosenBook.title,
+            ...(platform === 'screenshot' ? { text: fullText } : {}),
+          });
           nativeShared = true;
-          // 原生分享完成後，提示使用者文字已在剪貼簿（部分 app 不接收 text 參數）
+          // 分享完成後開啟平台網址（平台按鈕）
+          if (platform !== 'screenshot' && platformUrls[platform]) {
+            window.open(platformUrls[platform], '_blank', 'noopener,noreferrer');
+          }
+          // 提示使用者文字已在剪貼簿
           setTextCopied(true);
           setTimeout(() => setTextCopied(false), 4000);
         } catch (err) {
@@ -294,7 +302,7 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
       }
 
       if (!nativeShared) {
-        // 下載圖片（桌面 fallback，或平台按鈕）
+        // 桌面：下載圖片
         const objUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = objUrl; a.download = 'serendipity-book.png';
