@@ -284,9 +284,8 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
       const isMobile = navigator.maxTouchPoints > 1;
       let nativeShared = false;
 
-      if (isMobile && navigator.canShare?.({ files: [file] })) {
-        // 手機：原生分享選單讓使用者儲存圖片到相簿
-        // 截圖分享 → 帶 text；平台按鈕 → 分享後另開平台網址
+      // 手機：直接 try navigator.share（不依賴 canShare，部分裝置 canShare 回傳 false 但 share 仍可用）
+      if (isMobile && typeof navigator.share === 'function') {
         try {
           await navigator.share({
             files: [file],
@@ -303,12 +302,12 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
           setTimeout(() => setTextCopied(false), 4000);
         } catch (err) {
           if (err instanceof Error && err.name === 'AbortError') return; // 使用者取消
-          // 其他錯誤 → 降級到下載
+          // NotSupportedError / 其他 → 降級到下載
         }
       }
 
       if (!nativeShared) {
-        // 桌面：下載圖片
+        // 桌面或 share 不支援：下載圖片
         const objUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = objUrl; a.download = 'serendipity-book.png';
