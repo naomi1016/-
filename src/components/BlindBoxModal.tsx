@@ -294,9 +294,9 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
             ...(platform === 'screenshot' ? { text: fullText } : {}),
           });
           nativeShared = true;
-          // 分享完成後跳轉平台（平台按鈕）
+          // 分享完成後開啟平台（平台按鈕）
           if (platform !== 'screenshot' && platformUrls[platform]) {
-            window.location.href = platformUrls[platform];
+            window.open(platformUrls[platform], '_blank', 'noopener,noreferrer');
           }
           // 提示使用者文字已在剪貼簿
           setTextCopied(true);
@@ -315,9 +315,9 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
 
-        // 各平台按鈕：跳轉
+        // 各平台按鈕：開啟平台（新分頁/觸發 app，不離開當前頁）
         if (platformUrls[platform]) {
-          window.location.href = platformUrls[platform];
+          window.open(platformUrls[platform], '_blank', 'noopener,noreferrer');
         }
 
         setCopied(true);
