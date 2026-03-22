@@ -485,9 +485,7 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
 
                 {/* 分享 */}
                 <div className="space-y-2">
-                  <p className="text-stone-400 text-[11px] text-center">
-                    {isMobile ? '分享這本命運之書（從選單選擇平台）' : '分享這本命運之書'}
-                  </p>
+                  <p className="text-stone-400 text-[11px] text-center">分享這本命運之書</p>
 
                   {/* 截圖分享：主要按鈕（含連結）*/}
                   <button
@@ -500,7 +498,7 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
                       ? <><Loader2 size={13} className="animate-spin" /> 生成中…</>
                       : copied
                         ? <><Check size={13} /> 已下載並複製連結！</>
-                        : <><Camera size={13} /> 截圖分享</>
+                        : <><Camera size={13} /> 截圖分享這本命運之書</>
                     }
                   </button>
                   {/* 行動端：分享後提示文字已在剪貼簿 */}
