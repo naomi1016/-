@@ -249,9 +249,15 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
     const url = window.location.href;
     const fullText = `${shareText}\n${url}`;
 
+    const isMobileNav = navigator.maxTouchPoints > 1;
     const platformUrls: Record<string, string> = {
-      line:     `https://line.me/R/msg/text/?${encodeURIComponent(fullText)}`,
+      // LINE：手機用 URI scheme 直接開 app；桌面用 universal link
+      line:     isMobileNav
+        ? `line://msg/text/?${encodeURIComponent(fullText)}`
+        : `https://line.me/R/msg/text/?${encodeURIComponent(fullText)}`,
+      // Facebook：無可靠 mobile deep link，維持 web 分享頁
       facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent(shareText)}`,
+      // Threads：universal link，iOS 有安裝 app 時會直接開啟
       threads:  `https://www.threads.net/intent/post?text=${encodeURIComponent(fullText)}`,
     };
 
@@ -288,9 +294,9 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
             ...(platform === 'screenshot' ? { text: fullText } : {}),
           });
           nativeShared = true;
-          // 分享完成後開啟平台網址（平台按鈕）
+          // 分享完成後跳轉平台（平台按鈕）
           if (platform !== 'screenshot' && platformUrls[platform]) {
-            window.open(platformUrls[platform], '_blank', 'noopener,noreferrer');
+            window.location.href = platformUrls[platform];
           }
           // 提示使用者文字已在剪貼簿
           setTextCopied(true);
@@ -309,9 +315,9 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
 
-        // 各平台按鈕：另開平台分享頁（直接跳轉）
+        // 各平台按鈕：跳轉
         if (platformUrls[platform]) {
-          window.open(platformUrls[platform], '_blank', 'noopener,noreferrer');
+          window.location.href = platformUrls[platform];
         }
 
         setCopied(true);
