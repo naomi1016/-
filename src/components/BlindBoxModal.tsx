@@ -59,6 +59,7 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
   const [copied, setCopied]           = useState(false);
   const [textCopied, setTextCopied]   = useState(false); // 行動端分享後提示文字已複製
   const [sharing, setSharing]         = useState(false);
+  const isMobile = navigator.maxTouchPoints > 1;
   const timerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef  = useRef(false);
 
@@ -432,7 +433,9 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
 
                 {/* 分享 */}
                 <div className="space-y-2">
-                  <p className="text-stone-400 text-[11px] text-center">分享這本命運之書</p>
+                  <p className="text-stone-400 text-[11px] text-center">
+                    {isMobile ? '分享這本命運之書（從選單選擇平台）' : '分享這本命運之書'}
+                  </p>
 
                   {/* 截圖分享：主要按鈕（含連結）*/}
                   <button
@@ -455,8 +458,8 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
                     </p>
                   )}
 
-                  {/* 文字分享：各平台小按鈕 */}
-                  <div className="flex items-center justify-center gap-2">
+                  {/* 文字分享：各平台小按鈕（桌面版才顯示，手機版從系統分享選單選平台） */}
+                  {!isMobile && <div className="flex items-center justify-center gap-2">
 
                     {/* LINE */}
                     <button
@@ -493,7 +496,7 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
                         <path d="M141.537 88.988a66.667 66.667 0 00-2.518-1.143c-1.482-27.307-16.403-42.94-41.457-43.1h-.34c-14.986 0-27.449 6.396-35.12 18.036l13.779 9.452c5.73-8.695 14.724-10.548 21.348-10.548h.23c8.248.054 14.474 2.499 18.515 7.264 2.902 3.477 4.846 8.288 5.798 14.393-7.635-1.298-15.876-1.696-24.682-1.19-24.826 1.43-40.797 15.913-39.795 36.03.503 10.17 5.545 18.927 14.206 24.654 7.322 4.879 16.739 7.266 26.548 6.724 12.985-.705 23.199-5.596 30.368-14.54 5.447-6.844 8.895-15.712 10.464-27.073 6.273 3.782 10.928 8.661 13.442 14.542 4.208 9.927 4.448 26.228-8.683 39.361-11.503 11.503-25.319 16.463-46.22 16.615-23.167-.173-40.778-7.5-52.36-21.793C29.748 131.51 24.02 112.627 23.808 88c.212-24.627 5.94-43.51 17.157-56.13C52.52 17.717 70.13 10.39 93.297 10.218c23.343.174 41.13 7.535 52.85 21.887 5.746 7.07 10.028 15.96 12.816 26.48l16.149-4.348c-3.441-12.71-8.878-23.668-16.268-32.788C143.935 5.94 121.744-2.131 93.508 0h-.238C65.08-.132 43.1 7.851 27.85 23.725 14.397 37.773 7.442 57.61 7.208 82.712L7.2 83.2v.8c.003 25.104 6.953 44.966 20.617 59.032C43.099 158.81 65.095 166.972 93.37 167.2h.238c22.738 0 38.71-6.11 51.9-19.298 17.55-17.553 17.026-39.648 11.291-53.161-4.087-9.64-11.826-17.48-15.262-19.753z"/>
                       </svg>
                     </button>
-                  </div>
+                  </div>}
                 </div>
 
                 {/* 按鈕 */}
