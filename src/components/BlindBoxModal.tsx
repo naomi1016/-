@@ -57,6 +57,7 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
   const [aiMessage, setAiMessage]     = useState('');
   const [msgLoading, setMsgLoading]   = useState(false);
   const [copied, setCopied]           = useState(false);
+  const [textCopied, setTextCopied]   = useState(false); // 行動端分享後提示文字已複製
   const [sharing, setSharing]         = useState(false);
   const timerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef  = useRef(false);
@@ -283,6 +284,9 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
         try {
           await navigator.share({ files: [file], title: chosenBook.title, text: fullText });
           nativeShared = true;
+          // 原生分享完成後，提示使用者文字已在剪貼簿（部分 app 不接收 text 參數）
+          setTextCopied(true);
+          setTimeout(() => setTextCopied(false), 4000);
         } catch (err) {
           if (err instanceof Error && err.name === 'AbortError') return; // 使用者取消
           // 其他錯誤 → 降級到下載
@@ -431,6 +435,12 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
                         : <><Camera size={13} /> 截圖分享</>
                     }
                   </button>
+                  {/* 行動端：分享後提示文字已在剪貼簿 */}
+                  {textCopied && (
+                    <p className="text-center text-[11px] text-emerald-600 font-medium animate-pulse">
+                      ✅ 分享文字已複製到剪貼簿，貼到 app 即可！
+                    </p>
+                  )}
 
                   {/* 文字分享：各平台小按鈕 */}
                   <div className="flex items-center justify-center gap-2">
