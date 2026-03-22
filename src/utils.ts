@@ -23,8 +23,7 @@ export function getCategoryId(callNumber: string): string {
   return '0123456789'.includes(first) ? first : 'other';
 }
 
-export const getCoverFallback = (book: Book): string =>
-  `https://picsum.photos/seed/${encodeURIComponent(book.title)}/300/400`;
+export const getCoverFallback = (_book: Book): string => '/no-cover.svg';
 
 /** Redmean 色彩感知距離（比純 Euclidean 更接近人眼感受） */
 export function colorDistance(
