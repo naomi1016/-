@@ -244,51 +244,66 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
   // ── 分享 ───────────────────────────────────────────────
   const handleShare = useCallback(async (platform: string) => {
     if (!chosenBook) return;
-    const text = `我在「Serendipity 北市圖新書導航」盲盒選書中抽到了《${chosenBook.title}》✨${aiMessage ? `\n${aiMessage}` : ''}\n快來試試你的命運之書！`;
-    const url  = window.location.href;
+    const shareText = `我在「Serendipity 北市圖新書導航」盲盒選書中抽到了《${chosenBook.title}》✨${aiMessage ? `\n${aiMessage}` : ''}\n快來試試你的命運之書！`;
+    const url = window.location.href;
+    const fullText = `${shareText}\n${url}`;
 
-    if (platform === 'screenshot') {
-      setSharing(true);
-      try {
-        const blob = await generateShareCard();
-        if (!blob) throw new Error('canvas failed');
-        const file = new File([blob], 'serendipity-book.png', { type: 'image/png' });
-        if (navigator.canShare?.({ files: [file] })) {
-          // 行動裝置：原生分享選單（圖片＋文字＋連結）
-          await navigator.share({ files: [file], title: chosenBook.title, text: `${text}\n${url}` });
-        } else {
-          // 桌面 fallback：下載圖片＋複製文字連結到剪貼簿
-          const objUrl = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = objUrl;
-          a.download = 'serendipity-book.png';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
-          try {
-            await navigator.clipboard.writeText(`${text}\n${url}`);
-          } catch {
-            const ta = document.createElement('textarea');
-            ta.value = `${text}\n${url}`;
-            document.body.appendChild(ta); ta.select();
-            document.execCommand('copy');
-            document.body.removeChild(ta);
-          }
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2500);
-        }
-      } catch { /* user cancelled */ }
-      finally { setSharing(false); }
-      return;
-    }
-
-    const shareUrls: Record<string, string> = {
-      line:     `https://line.me/R/msg/text/?${encodeURIComponent(`${text}\n${url}`)}`,
-      facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent(text)}`,
-      threads:  `https://www.threads.net/intent/post?text=${encodeURIComponent(`${text}\n${url}`)}`,
+    const platformUrls: Record<string, string> = {
+      line:     `https://line.me/R/msg/text/?${encodeURIComponent(fullText)}`,
+      facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent(shareText)}`,
+      threads:  `https://www.threads.net/intent/post?text=${encodeURIComponent(fullText)}`,
     };
-    window.open(shareUrls[platform], '_blank', 'noopener,noreferrer');
+
+    // ── Step 1：立即同步複製文字（user gesture 仍有效時）──────
+    // execCommand 是同步的，不受 user gesture 視窗限制
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = fullText;
+      ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0;pointer-events:none';
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    } catch { /* ok */ }
+    // 同時非同步嘗試現代 API（可能覆寫上方結果，但更可靠）
+    navigator.clipboard?.writeText(fullText).catch(() => {});
+
+    // ── Step 2：生成圖片（async，不影響剪貼簿時序）────────────
+    setSharing(true);
+    try {
+      const blob = await generateShareCard();
+      if (!blob) throw new Error('canvas failed');
+      const file = new File([blob], 'serendipity-book.png', { type: 'image/png' });
+
+      // 行動裝置：原生分享選單（圖片＋文字＋連結）
+      let nativeShared = false;
+      if (navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: chosenBook.title, text: fullText });
+          nativeShared = true;
+        } catch (err) {
+          if (err instanceof Error && err.name === 'AbortError') return; // 使用者取消
+          // NotSupportedError 等 → 降級到下載
+        }
+      }
+
+      if (!nativeShared) {
+        // 桌面 fallback：下載圖片
+        const objUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = objUrl; a.download = 'serendipity-book.png';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
+
+        // 各平台按鈕：另開平台分享頁
+        if (platformUrls[platform]) {
+          window.open(platformUrls[platform], '_blank', 'noopener,noreferrer');
+        }
+
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2500);
+      }
+    } catch { /* 圖片生成失敗 */ }
+    finally { setSharing(false); }
   }, [chosenBook, aiMessage, generateShareCard]);
 
   return (
