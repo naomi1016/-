@@ -17,16 +17,17 @@ export default defineConfig(({mode}) => {
           name: '北圖本月新書通報',
           short_name: '北圖新書',
           description: '台北市立圖書館本月新進書目，支援語義搜尋與色系篩選',
-          theme_color: '#10b981',
+          theme_color: '#064e3b',
           background_color: '#f8fafc',
+          id: '/',
           display: 'standalone',
           orientation: 'portrait',
           scope: '/',
           start_url: '/',
           lang: 'zh-TW',
           icons: [
-            { src: 'pwa-192x192.png',         sizes: '192x192', type: 'image/png' },
-            { src: 'pwa-512x512.png',         sizes: '512x512', type: 'image/png' },
+            { src: 'pwa-192x192.png',         sizes: '192x192', type: 'image/png', purpose: 'any' },
+            { src: 'pwa-512x512.png',         sizes: '512x512', type: 'image/png', purpose: 'any' },
             { src: 'pwa-maskable-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
           ],
         },
@@ -43,7 +44,7 @@ export default defineConfig(({mode}) => {
             },
             // 書封圖片：快取優先，最多 500 張
             {
-              urlPattern: /\.(jpg|jpeg|png|webp|gif)$/,
+              urlPattern: /\.(jpg|jpeg|png|webp|gif)/i,
               handler: 'CacheFirst',
               options: {
                 cacheName: 'cover-images',

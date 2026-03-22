@@ -1,11 +1,36 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Sparkles } from 'lucide-react';
+import { X, Sparkles, Copy, Check, Camera, Loader2 } from 'lucide-react';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { Book } from '../types';
 import { getCoverFallback } from '../utils';
 
 const API_KEY = process.env.GEMINI_API_KEY || '';
+
+// ── Canvas helpers ──────────────────────────────────────────────────────────
+function cRRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r); ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);    ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);        ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+}
+
+function cWrapText(ctx: CanvasRenderingContext2D, text: string, cx: number, y: number, maxW: number, lineH: number, maxLines = 2) {
+  let line = ''; const lines: string[] = [];
+  for (const ch of Array.from(text)) {
+    const t = line + ch;
+    if (ctx.measureText(t).width > maxW && line) {
+      lines.push(line);
+      if (lines.length >= maxLines) { lines[lines.length - 1] += '…'; break; }
+      line = ch;
+    } else { line = t; }
+  }
+  if (line && lines.length < maxLines) lines.push(line);
+  lines.forEach((l, i) => ctx.fillText(l, cx, y + i * lineH));
+}
 
 const FALLBACK_JOKES = [
   '書已經認定你了，拒絕是沒有用的。',
@@ -31,6 +56,8 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
   const [chosenBook, setChosenBook]   = useState<Book | null>(null);
   const [aiMessage, setAiMessage]     = useState('');
   const [msgLoading, setMsgLoading]   = useState(false);
+  const [copied, setCopied]           = useState(false);
+  const [sharing, setSharing]         = useState(false);
   const timerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef  = useRef(false);
 
@@ -122,6 +149,147 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
     return () => { abortRef.current = true; };
   }, [chosenBook]);
 
+  // ── 生成分享卡片（Canvas） ─────────────────────────────
+  const generateShareCard = useCallback(async (): Promise<Blob | null> => {
+    if (!chosenBook) return null;
+    const W = 630, H = 900;
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    const FONT = `"PingFang TC","Noto Sans TC",system-ui,sans-serif`;
+
+    // Background gradient
+    const bg = ctx.createLinearGradient(0, 0, W, H);
+    bg.addColorStop(0, '#fbbf24'); bg.addColorStop(0.55, '#f97316'); bg.addColorStop(1, '#f43f5e');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+
+    // White card
+    ctx.fillStyle = 'white'; cRRect(ctx, 24, 24, W - 48, H - 48, 32); ctx.fill();
+
+    // Header gradient band
+    const hg = ctx.createLinearGradient(24, 24, W - 24, 200);
+    hg.addColorStop(0, '#fbbf24'); hg.addColorStop(1, '#f97316');
+    ctx.fillStyle = hg; cRRect(ctx, 24, 24, W - 48, 160, 32); ctx.fill();
+    ctx.fillRect(24, 140, W - 48, 44); // fill bottom of header (remove lower radius)
+
+    // Header text
+    ctx.fillStyle = 'white'; ctx.textAlign = 'center';
+    ctx.font = `bold 34px ${FONT}`; ctx.fillText('✨ 抽一張 SSR 靈魂伴侶 🃏', W / 2, 94);
+    ctx.font = `22px ${FONT}`; ctx.fillStyle = 'rgba(255,255,255,0.82)';
+    ctx.fillText('命運已定！', W / 2, 138);
+
+    // Cover area
+    const covW = 230, covH = 310, covX = (W - covW) / 2, covY = 212;
+
+    // Try CORS load; fallback to styled placeholder
+    let coverOk = false;
+    try {
+      const img = await new Promise<HTMLImageElement>((res, rej) => {
+        const i = new Image(); i.crossOrigin = 'anonymous';
+        i.onload = () => res(i); i.onerror = rej;
+        i.src = chosenBook.coverUrl || ''; setTimeout(rej, 6000);
+      });
+      ctx.save(); cRRect(ctx, covX, covY, covW, covH, 14); ctx.clip();
+      ctx.drawImage(img, covX, covY, covW, covH); ctx.restore();
+      coverOk = true;
+    } catch { /* CORS blocked → use placeholder */ }
+
+    if (!coverOk) {
+      // Stylized placeholder: gradient + title
+      const pg = ctx.createLinearGradient(covX, covY, covX + covW, covY + covH);
+      pg.addColorStop(0, '#065f46'); pg.addColorStop(1, '#0c4a6e');
+      ctx.fillStyle = pg; cRRect(ctx, covX, covY, covW, covH, 14); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillRect(covX + 12, covY + 12, covW - 24, 2);
+      ctx.fillRect(covX + 12, covY + covH - 14, covW - 24, 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.88)'; ctx.textAlign = 'center';
+      ctx.font = `bold 22px ${FONT}`;
+      cWrapText(ctx, chosenBook.title, W / 2, covY + covH / 2 - 22, covW - 24, 30, 3);
+    }
+
+    // Cover golden glow border
+    ctx.save();
+    ctx.shadowColor = 'rgba(251,191,36,0.55)'; ctx.shadowBlur = 20;
+    ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 3.5;
+    cRRect(ctx, covX - 4, covY - 4, covW + 8, covH + 8, 18); ctx.stroke();
+    ctx.restore();
+
+    // Book title + author
+    const infoY = covY + covH + 44;
+    ctx.fillStyle = '#1c1917'; ctx.textAlign = 'center';
+    ctx.font = `bold 27px ${FONT}`;
+    cWrapText(ctx, chosenBook.title, W / 2, infoY, W - 96, 36, 2);
+    if (chosenBook.author) {
+      ctx.fillStyle = '#78716c'; ctx.font = `19px ${FONT}`;
+      ctx.fillText(chosenBook.author.slice(0, 32), W / 2, infoY + 84);
+    }
+
+    // AI message box
+    const msgY = infoY + 116;
+    ctx.fillStyle = '#fffbeb'; cRRect(ctx, 52, msgY, W - 104, 108, 20); ctx.fill();
+    ctx.strokeStyle = '#fde68a'; ctx.lineWidth = 2;
+    cRRect(ctx, 52, msgY, W - 104, 108, 20); ctx.stroke();
+    ctx.fillStyle = '#92400e'; ctx.font = `20px ${FONT}`; ctx.textAlign = 'center';
+    cWrapText(ctx, `✨ ${aiMessage}`, W / 2, msgY + 36, W - 136, 30, 2);
+
+    // Branding footer
+    ctx.fillStyle = '#a8a29e'; ctx.font = `15px system-ui,sans-serif`; ctx.textAlign = 'center';
+    ctx.fillText('Serendipity · 北市圖新書導航', W / 2, H - 40);
+
+    return new Promise(resolve => canvas.toBlob(b => resolve(b), 'image/png'));
+  }, [chosenBook, aiMessage]);
+
+  // ── 分享 ───────────────────────────────────────────────
+  const handleShare = useCallback(async (platform: string) => {
+    if (!chosenBook) return;
+    const text = `我在「Serendipity 北市圖新書導航」盲盒選書中抽到了《${chosenBook.title}》✨${aiMessage ? `\n${aiMessage}` : ''}\n快來試試你的命運之書！`;
+    const url  = window.location.href;
+
+    if (platform === 'screenshot') {
+      setSharing(true);
+      try {
+        const blob = await generateShareCard();
+        if (!blob) throw new Error('canvas failed');
+        const file = new File([blob], 'serendipity-book.png', { type: 'image/png' });
+        if (navigator.canShare?.({ files: [file] })) {
+          await navigator.share({ files: [file], title: chosenBook.title, text });
+        } else {
+          // Fallback: download image
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = 'serendipity-book.png';
+          a.click(); URL.revokeObjectURL(a.href);
+        }
+      } catch { /* user cancelled or not supported */ }
+      finally { setSharing(false); }
+      return;
+    }
+
+    if (platform === 'copy') {
+      try {
+        await navigator.clipboard.writeText(`${text}\n${url}`);
+      } catch {
+        const ta = document.createElement('textarea');
+        ta.value = `${text}\n${url}`;
+        document.body.appendChild(ta); ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      return;
+    }
+
+    const shareUrls: Record<string, string> = {
+      line:     `https://line.me/R/msg/text/?${encodeURIComponent(`${text}\n${url}`)}`,
+      facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent(text)}`,
+      threads:  `https://www.threads.net/intent/post?text=${encodeURIComponent(`${text}\n${url}`)}`,
+    };
+    window.open(shareUrls[platform], '_blank', 'noopener,noreferrer');
+  }, [chosenBook, aiMessage, generateShareCard]);
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -179,7 +347,11 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
                   alt={displayBook.title}
                   className="w-full object-cover"
                   style={{ aspectRatio: '2/3' }}
-                  onError={e => { (e.target as HTMLImageElement).src = getCoverFallback(displayBook); }}
+                  onError={e => {
+                    const img = e.target as HTMLImageElement;
+                    img.onerror = null;
+                    img.src = getCoverFallback(displayBook);
+                  }}
                 />
               </motion.div>
             </AnimatePresence>
@@ -220,6 +392,76 @@ export default function BlindBoxModal({ books, onClose, onOpenBook, onReroll }: 
                   ) : (
                     <p className="text-amber-800 text-sm leading-snug text-center line-clamp-2">✨ {aiMessage}</p>
                   )}
+                </div>
+
+                {/* 分享 */}
+                <div className="space-y-2">
+                  <p className="text-stone-400 text-[11px] text-center">分享這本命運之書</p>
+
+                  {/* 截圖分享：主要按鈕 */}
+                  <button
+                    onClick={() => handleShare('screenshot')}
+                    disabled={sharing}
+                    className="w-full py-2 rounded-xl bg-gradient-to-r from-amber-400 to-orange-400 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-95 disabled:opacity-60"
+                  >
+                    {sharing
+                      ? <><Loader2 size={13} className="animate-spin" /> 生成中…</>
+                      : <><Camera size={13} /> 截圖分享</>
+                    }
+                  </button>
+
+                  {/* 文字分享：各平台小按鈕 */}
+                  <div className="flex items-center justify-center gap-2">
+
+                    {/* LINE */}
+                    <button
+                      onClick={() => handleShare('line')}
+                      title="分享到 LINE"
+                      className="w-9 h-9 rounded-full flex items-center justify-center shadow-sm transition-transform active:scale-90 hover:scale-105"
+                      style={{ background: '#06C755' }}
+                    >
+                      <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white">
+                        <path d="M19.365 9.863c.349 0 .63.285.63.631 0 .344-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63h2.386c.349 0 .63.285.63.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63.349 0 .631.285.631.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.281.629-.629.629M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0"/>
+                      </svg>
+                    </button>
+
+                    {/* Facebook */}
+                    <button
+                      onClick={() => handleShare('facebook')}
+                      title="分享到 Facebook"
+                      className="w-9 h-9 rounded-full flex items-center justify-center shadow-sm transition-transform active:scale-90 hover:scale-105"
+                      style={{ background: '#1877F2' }}
+                    >
+                      <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white">
+                        <path d="M24 12.073C24 5.405 18.627 0 12 0S0 5.405 0 12.073c0 6.027 4.388 11.024 10.125 11.927v-8.437H7.078v-3.49h3.047V9.41c0-3.025 1.791-4.697 4.533-4.697 1.312 0 2.686.236 2.686.236v2.97h-1.513c-1.491 0-1.956.93-1.956 1.874v2.281h3.328l-.532 3.49h-2.796v8.437C19.612 23.097 24 18.1 24 12.073z"/>
+                      </svg>
+                    </button>
+
+                    {/* Threads */}
+                    <button
+                      onClick={() => handleShare('threads')}
+                      title="分享到 Threads"
+                      className="w-9 h-9 rounded-full flex items-center justify-center shadow-sm transition-transform active:scale-90 hover:scale-105"
+                      style={{ background: '#000' }}
+                    >
+                      <svg viewBox="0 0 192 192" className="w-5 h-5 fill-white">
+                        <path d="M141.537 88.988a66.667 66.667 0 00-2.518-1.143c-1.482-27.307-16.403-42.94-41.457-43.1h-.34c-14.986 0-27.449 6.396-35.12 18.036l13.779 9.452c5.73-8.695 14.724-10.548 21.348-10.548h.23c8.248.054 14.474 2.499 18.515 7.264 2.902 3.477 4.846 8.288 5.798 14.393-7.635-1.298-15.876-1.696-24.682-1.19-24.826 1.43-40.797 15.913-39.795 36.03.503 10.17 5.545 18.927 14.206 24.654 7.322 4.879 16.739 7.266 26.548 6.724 12.985-.705 23.199-5.596 30.368-14.54 5.447-6.844 8.895-15.712 10.464-27.073 6.273 3.782 10.928 8.661 13.442 14.542 4.208 9.927 4.448 26.228-8.683 39.361-11.503 11.503-25.319 16.463-46.22 16.615-23.167-.173-40.778-7.5-52.36-21.793C29.748 131.51 24.02 112.627 23.808 88c.212-24.627 5.94-43.51 17.157-56.13C52.52 17.717 70.13 10.39 93.297 10.218c23.343.174 41.13 7.535 52.85 21.887 5.746 7.07 10.028 15.96 12.816 26.48l16.149-4.348c-3.441-12.71-8.878-23.668-16.268-32.788C143.935 5.94 121.744-2.131 93.508 0h-.238C65.08-.132 43.1 7.851 27.85 23.725 14.397 37.773 7.442 57.61 7.208 82.712L7.2 83.2v.8c.003 25.104 6.953 44.966 20.617 59.032C43.099 158.81 65.095 166.972 93.37 167.2h.238c22.738 0 38.71-6.11 51.9-19.298 17.55-17.553 17.026-39.648 11.291-53.161-4.087-9.64-11.826-17.48-15.262-19.753z"/>
+                      </svg>
+                    </button>
+
+                    {/* 複製連結 */}
+                    <button
+                      onClick={() => handleShare('copy')}
+                      title="複製連結"
+                      className={`w-9 h-9 rounded-full flex items-center justify-center shadow-sm transition-all active:scale-90 hover:scale-105
+                        ${copied ? 'bg-emerald-500' : 'bg-stone-200 hover:bg-stone-300'}`}
+                    >
+                      {copied
+                        ? <Check size={16} className="text-white" />
+                        : <Copy size={16} className="text-stone-600" />
+                      }
+                    </button>
+                  </div>
                 </div>
 
                 {/* 按鈕 */}

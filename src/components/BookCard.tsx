@@ -107,7 +107,11 @@ export default function BookCard({ book, onClick, glowColor, searchQuery = '', h
           className="w-full h-full object-cover transition-all duration-700 ease-out
                      group-hover:scale-110 group-hover:rotate-1"
           loading="lazy"
-          onError={e => { (e.target as HTMLImageElement).src = getCoverFallback(book); }}
+          onError={e => {
+            const img = e.target as HTMLImageElement;
+            img.onerror = null; // 防止無限迴圈
+            img.src = getCoverFallback(book);
+          }}
         />
         {/* 底部漸層遮罩 */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent

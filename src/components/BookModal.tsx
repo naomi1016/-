@@ -79,7 +79,11 @@ export default function BookModal({ book, onClose }: Props) {
               alt={book.title}
               referrerPolicy="no-referrer"
               className="w-full h-full object-cover"
-              onError={e => { (e.target as HTMLImageElement).src = getCoverFallback(book); }}
+              onError={e => {
+                const img = e.target as HTMLImageElement;
+                img.onerror = null;
+                img.src = getCoverFallback(book);
+              }}
             />
           </div>
         </div>

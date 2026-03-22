@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#064e3b"/>
+      <stop offset="100%" stop-color="#0c4a6e"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="0.6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background rounded square -->
+  <rect width="32" height="32" rx="7" fill="url(#bg)"/>
+
+  <!-- SSR golden border -->
+  <rect x="2" y="2" width="28" height="28" rx="5.5"
+        fill="none" stroke="url(#gold)" stroke-width="1.4" opacity="0.9"/>
+
+  <!-- Open book: left page -->
+  <path d="M16 9 L7.5 10.8 L7.5 23.5 L16 22 Z"
+        fill="#fefce8" stroke="#c8b87a" stroke-width="0.5"/>
+  <!-- Open book: right page -->
+  <path d="M16 9 L24.5 10.8 L24.5 23.5 L16 22 Z"
+        fill="#ffffff" stroke="#c8b87a" stroke-width="0.5"/>
+  <!-- Spine -->
+  <rect x="15.2" y="9" width="1.6" height="13" fill="#c8a84b"/>
+
+  <!-- Text lines left page -->
+  <line x1="9"  y1="14" x2="14.5" y2="13.6" stroke="#c4aa80" stroke-width="0.8" stroke-linecap="round"/>
+  <line x1="9"  y1="16.5" x2="14.5" y2="16.1" stroke="#c4aa80" stroke-width="0.8" stroke-linecap="round"/>
+  <line x1="9"  y1="19" x2="13"   y2="18.7" stroke="#c4aa80" stroke-width="0.8" stroke-linecap="round"/>
+
+  <!-- Text lines right page -->
+  <line x1="17.5" y1="14"   x2="23" y2="13.6" stroke="#c4aa80" stroke-width="0.8" stroke-linecap="round"/>
+  <line x1="17.5" y1="16.5" x2="23" y2="16.1" stroke="#c4aa80" stroke-width="0.8" stroke-linecap="round"/>
+  <line x1="17.5" y1="19"   x2="21" y2="18.7" stroke="#c4aa80" stroke-width="0.8" stroke-linecap="round"/>
+
+  <!-- AI sparkle star top-right (4-point) -->
+  <path d="M25.5 5.5 L26.3 7.2 L28 8 L26.3 8.8 L25.5 10.5 L24.7 8.8 L23 8 L24.7 7.2 Z"
+        fill="#fbbf24" filter="url(#glow)"/>
+
+  <!-- Small dot sparkles -->
+  <circle cx="6.5"  cy="6.5"  r="1"   fill="#fbbf24" opacity="0.8"/>
+  <circle cx="26"   cy="25.5" r="0.7" fill="#ffffff"  opacity="0.6"/>
+  <circle cx="6"    cy="26"   r="0.5" fill="#ffffff"  opacity="0.5"/>
+</svg>
