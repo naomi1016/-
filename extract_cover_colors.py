@@ -108,9 +108,18 @@ def main():
                 print(f"  {total_done}/{len(todo)}  成功 {done}  失敗 {failed}"
                       f"  {rate:.1f} 本/秒  剩餘約 {remaining:.0f} 秒")
 
-    # 存回
+    # 存回 JSON
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(books, f, ensure_ascii=False, separators=(",", ":"))
+
+    # 同步 coverColor 回 SQLite
+    try:
+        import db as book_db
+        conn = book_db.get_connection()
+        book_db.sync_cover_colors(conn, books)
+        conn.close()
+    except Exception as e:
+        print(f"  ⚠️  db 同步失敗（不影響 JSON）：{e}")
 
     elapsed = time.time() - start
     has_color = sum(1 for b in books if b.get("coverColor"))

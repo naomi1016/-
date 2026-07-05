@@ -16,6 +16,7 @@
 import json, time, warnings, re, datetime
 import requests
 from playwright.sync_api import sync_playwright
+import db as book_db
 
 warnings.filterwarnings("ignore")
 
@@ -261,8 +262,26 @@ def scrape_month(newbookDate):
                     except Exception: pass
 
             page2.on("request", on_req2)
-            page2.goto(TARGET_URL, wait_until="networkidle", timeout=60000)
-            time.sleep(4)
+            # 重試 page.goto，最多 3 次，避免限流導致逾時
+            for _goto_attempt in range(3):
+                try:
+                    page2.goto(TARGET_URL, wait_until="networkidle", timeout=90000)
+                    break
+                except Exception as _ge:
+                    if _goto_attempt < 2:
+                        wait = 30 * (2 ** _goto_attempt)
+                        print(f"    ⚠️  page.goto 失敗（第{_goto_attempt+1}次），等 {wait}s 後重試：{_ge}")
+                        time.sleep(wait)
+                    else:
+                        print(f"    ❌ page.goto 連續 3 次失敗，跳過此批次：{_ge}")
+                        browser.close()
+                        goto_failed = True
+                        break
+            else:
+                goto_failed = False
+            if 'goto_failed' in dir() and goto_failed:
+                continue
+            time.sleep(8)
 
             csrf2, query_str2 = cap2["headers"].get("x-csrf-token", ""), cap2["query"] or query_str
             sess2 = requests.Session()
@@ -272,6 +291,7 @@ def scrape_month(newbookDate):
             for ck in ctx2.cookies():
                 sess2.cookies.set(ck["name"], ck["value"], domain=ck.get("domain", ""))
 
+            no_token_count = 0
             for idx, (code, br_name) in enumerate(batch, batch_start + 1):
                 try:
                     raw_br = page2.evaluate(EVALUATE_JS, [GQL_URL, query_str2, csrf2, [code], newbookDate])
@@ -279,7 +299,10 @@ def scrape_month(newbookDate):
                 except Exception as e:
                     print(f"    [{idx}] {br_name} evaluate 失敗：{e}"); continue
                 if not br_token:
-                    print(f"    [{idx}] {br_name}：無 token，略過"); continue
+                    no_token_count += 1
+                    print(f"    [{idx}] {br_name}：無 token，略過")
+                    continue
+                no_token_count = 0  # 重置計數
                 br_sids = set(sids_p1)
                 for pn in range(2, br_total + 1):
                     try:
@@ -300,6 +323,8 @@ def scrape_month(newbookDate):
                 for sid in br_sids:
                     bibid_to_branches.setdefault(sid, []).append(code)
             browser.close()
+            # 批次間休息，避免觸發限流
+            time.sleep(10)
 
     for b in all_books:
         branches = bibid_to_branches.get(b["bibId"], [])
@@ -391,16 +416,10 @@ def main():
     current_month      = month_label(current_month_code)
     print(f"當月：{current_month}（共 {len(months)} 個月可用）\n")
 
-    # 載入現有資料
-    try:
-        existing = json.load(open(OUTPUT_FILE, encoding="utf-8"))
-    except FileNotFoundError:
-        existing = []
-
-    # 分離當月 / 其他月份
-    other_months_books = [b for b in existing if b.get("month") != current_month]
-    existing_bids      = {b["bibId"] for b in existing if b.get("bibId")}
-    print(f"現有資料：{len(existing)} 本（其中 {len(other_months_books)} 本屬其他月份）\n")
+    conn = book_db.get_connection()
+    book_db.migrate_from_json(conn, OUTPUT_FILE)
+    old_current_count = book_db.get_month_count(conn, current_month)
+    print(f"現有當月資料：{old_current_count} 本\n")
 
     # 爬當月
     print(f"重新爬取 {current_month}…")
@@ -408,46 +427,44 @@ def main():
     print(f"爬取完成：{len(fresh_books)} 本\n")
 
     # 覆蓋保護：若新爬數量比舊當月資料少超過 10%，警告並中止
-    old_current_count = len([b for b in existing if b.get("month") == current_month])
     if old_current_count > 0 and len(fresh_books) < old_current_count * 0.9:
         print(f"⛔ 中止：新爬 {len(fresh_books)} 本 < 舊資料 {old_current_count} 本的 90%，疑似爬取不完整，保留原資料。")
+        conn.close()
         return
 
-    # 找出新書（現有資料沒有的 bibId）
-    new_books = [b for b in fresh_books if b.get("bibId") and b["bibId"] not in existing_bids]
-    print(f"新增書目：{len(new_books)} 本")
-
-    # 保留舊書的書介（合併回）
-    bid_to_old = {b["bibId"]: b for b in existing if b.get("bibId")}
+    # 從 DB 取已有書介（跨月份），預先填入 fresh_books
+    existing_descs = book_db.get_descriptions_by_bibid(conn)
     for b in fresh_books:
-        old = bid_to_old.get(b.get("bibId", ""))
-        if old:
-            if old.get("description") and not b.get("description"):
-                b["description"] = old["description"]
-            if old.get("authorDesc") and not b.get("authorDesc"):
-                b["authorDesc"] = old["authorDesc"]
+        bid = b.get("bibId", "")
+        if bid in existing_descs:
+            if not b.get("description"):
+                b["description"] = existing_descs[bid]["description"]
+            if not b.get("authorDesc"):
+                b["authorDesc"] = existing_descs[bid]["authorDesc"]
 
-    # 只對新書補書介
-    if new_books:
-        fetch_descriptions(new_books)
+    # 找出本月新增且無書介的書，補充書介
+    existing_bids_this_month = {
+        r[0] for r in conn.execute(
+            "SELECT bibId FROM books WHERE month = ?", (current_month,)
+        ).fetchall()
+    }
+    new_books_no_desc = [
+        b for b in fresh_books
+        if b.get("bibId") and b["bibId"] not in existing_bids_this_month
+        and not b.get("description")
+    ]
+    print(f"本月新增書目：{len([b for b in fresh_books if b.get('bibId') and b['bibId'] not in existing_bids_this_month])} 本")
+    if new_books_no_desc:
+        fetch_descriptions(new_books_no_desc)
 
-    # 合併：其他月份 + 最新當月
-    all_books = other_months_books + fresh_books
+    book_db.upsert_books(conn, fresh_books)
+    total = book_db.export_to_json(conn, OUTPUT_FILE, year="2026")
+    conn.close()
 
-    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-        json.dump(all_books, f, ensure_ascii=False, indent=None, separators=(",", ":"))
-
-    month_counts = {}
-    for b in all_books:
-        m = b.get("month", "?")
-        month_counts[m] = month_counts.get(m, 0) + 1
-
-    print(f"\n✅ 更新完成：共 {len(all_books)} 本")
-    print("月份分布：")
-    for m, cnt in sorted(month_counts.items(), reverse=True):
-        print(f"  {m}：{cnt} 本")
-    has_desc = sum(1 for b in all_books if b.get("description"))
-    print(f"書介覆蓋：{has_desc}/{len(all_books)}（{has_desc*100//len(all_books) if all_books else 0}%）")
+    print(f"\n✅ 更新完成：DB 共 {total} 本（含所有月份）")
+    print(f"  當月 {current_month}：{len(fresh_books)} 本")
+    has_desc = sum(1 for b in fresh_books if b.get("description"))
+    print(f"  書介覆蓋（當月）：{has_desc}/{len(fresh_books)}（{has_desc*100//len(fresh_books) if fresh_books else 0}%）")
 
 if __name__ == "__main__":
     main()
