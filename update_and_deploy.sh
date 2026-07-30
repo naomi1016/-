@@ -25,27 +25,27 @@ cd "$PROJECT_DIR"
 
 # ── Step 1: 爬取最新書目 ──────────────────────────────
 echo ""
-echo "[1/4] 爬取最新書目..."
+echo "[1/5] 爬取最新書目..."
 /usr/bin/python3 update_books.py
 echo "✅ 書目爬取完成"
 
 # ── Step 2: 萃取封面主色 ─────────────────────────────
 echo ""
-echo "[2/4] 萃取封面主色..."
+echo "[2/5] 萃取封面主色..."
 /usr/bin/python3 extract_cover_colors.py
 echo "✅ 封面主色萃取完成"
 
 # ── Step 3: 建置前端 ─────────────────────────────────
 echo ""
 echo "[3/5] 建置前端（含 Vercel 輸出）..."
-/usr/local/bin/npx vercel@latest build --yes
+/usr/local/bin/npx vercel@latest build --prod --yes
 echo "✅ 前端建置完成"
 
-# ── Step 4: 部署至 Vercel ────────────────────────────
+# ── Step 4: 部署至 Vercel（正式站）──────────────────
 echo ""
-echo "[4/5] 部署至 Vercel..."
-/usr/local/bin/npx vercel@latest deploy --prebuilt --yes
-echo "✅ 已部署至 Vercel"
+echo "[4/5] 部署至 Vercel（正式站）..."
+/usr/local/bin/npx vercel@latest deploy --prebuilt --prod --yes
+echo "✅ 已部署至 Vercel 正式站"
 
 # ── Step 5: 提交並推送至 GitHub ──────────────────────
 echo ""
