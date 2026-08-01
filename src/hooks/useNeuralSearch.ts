@@ -29,9 +29,13 @@ function getEmbeddings(): Promise<Map<string, Float32Array>> {
 
 function getPipeline(): Promise<unknown> {
   if (!_pipelinePromise) {
-    _pipelinePromise = import('@xenova/transformers').then(({ pipeline }) =>
-      pipeline('feature-extraction', MODEL),
-    );
+    _pipelinePromise = import('@xenova/transformers').then(({ pipeline, env }) => {
+      // 本站未自架模型檔，直接從 HuggingFace CDN 下載，避免卡在本地 /models/ 404
+      env.allowLocalModels = false;
+      env.allowRemoteModels = true;
+      env.useBrowserCache = true; // 首次下載後快取於瀏覽器
+      return pipeline('feature-extraction', MODEL);
+    });
   }
   return _pipelinePromise;
 }
