@@ -20,19 +20,30 @@ export interface FilterState {
   isSemantic?: boolean; // 語義搜尋模式：輸入已排序，跳過文字搜尋與重新排序
 }
 
+// Service Worker 存放書目的 runtime cache 名稱（見 vite.config.ts）
+export const BOOKS_CACHE = 'books-data';
+export const BOOKS_URL   = '/books.json';
+
 export function useBooks() {
   const [books, setBooks]     = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState('');
+  // 目前這份資料的版本識別（來自 HTTP ETag），用於比對伺服器上是否有更新
+  const [etag, setEtag]       = useState<string | null>(null);
 
-  const loadBooks = useCallback(async () => {
+  const loadBooks = useCallback(async (force = false) => {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/books.json');
+      // force：先清掉 SW 快取，讓這次 fetch 一定走網路拿最新書目
+      if (force && 'caches' in window) {
+        await caches.delete(BOOKS_CACHE).catch(() => {});
+      }
+      const res = await fetch(BOOKS_URL);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: Book[] = await res.json();
       setBooks(data.map((b, i) => ({ ...b, id: i + 1 })));
+      setEtag(res.headers.get('etag'));
     } catch {
       setError('無法讀取 books.json，請先執行爬蟲腳本（scrape_tpml.py）產生資料檔。');
     } finally {
@@ -84,7 +95,7 @@ export function useBooks() {
   }, [books]);
 
   return {
-    books, loading, error, loadBooks,
+    books, loading, error, loadBooks, etag,
     availableLanguages, availableMaterialTypes, availableBranches, catCounts,
     yearBounds,
   };

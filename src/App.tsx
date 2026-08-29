@@ -25,6 +25,8 @@ import BookCard from './components/BookCard';
 import BookModal from './components/BookModal';
 import BlindBoxModal from './components/BlindBoxModal';
 import PwaInstallBanner from './components/PwaInstallBanner';
+import DataUpdateBanner from './components/DataUpdateBanner';
+import { useDataUpdate } from './hooks/useDataUpdate';
 
 // ── 出版年份區間滑桿 ──────────────────────────────────
 function YearRangeSlider({
@@ -700,10 +702,13 @@ function expandQuery(query: string): string {
 // ── 主 App ────────────────────────────────────────────
 export default function App() {
   const {
-    books, loading, error, loadBooks,
+    books, loading, error, loadBooks, etag,
     availableLanguages, availableMaterialTypes, availableBranches,
     yearBounds,
   } = useBooks();
+
+  // 書目有新版本時提示使用者更新（PWA 快取常會停在舊資料）
+  const dataUpdate = useDataUpdate(etag, loadBooks);
 
   const [inputValue,   setInputValue]             = useState('');
   const [searchQuery, setSearchQuery]             = useState('');
@@ -1546,6 +1551,14 @@ export default function App() {
           />
         )}
       </AnimatePresence>
+
+      <DataUpdateBanner
+        visible={dataUpdate.visible}
+        sizeBytes={dataUpdate.sizeBytes}
+        applying={dataUpdate.applying}
+        onApply={dataUpdate.apply}
+        onDismiss={dataUpdate.dismiss}
+      />
 
       <PwaInstallBanner />
     </div>
