@@ -26,6 +26,18 @@ OUTPUT_FILE = "public/books.json"
 BATCH_SIZE      = 12
 DESC_BATCH_SIZE = 200
 
+# ── 分頁爬取策略 ──────────────────────────────────────
+# 來源站有兩層防護：
+#   1. WAF 對純 HTTP 客戶端一律回 403 → 分頁必須走瀏覽器 fetch
+#      （見 EVALUATE_PAGE_JS），不能用 requests。
+#   2. 同一 session 累積約 150 次請求後也會開始回 403，且等待無效
+#      （實測退避 5/10/20s 皆失敗），但換新 session 可立即重置額度。
+# 因此策略是：每 PAGE_ROTATE 頁主動換 session，撞到 403 就立刻換而非等待。
+PAGE_DELAY         = 0.3   # 每頁之間的間隔（秒）
+PAGE_ROTATE        = 100   # 每抓幾頁主動換一個新的瀏覽器 session
+SESSION_PAUSE      = 3     # 換 session 之間的間隔（秒）
+PAGE_RETRY_BACKOFF = 5     # 單頁例外重試的等待（秒）
+
 BRANCH_MAP = {
     "C01": "總館",       "E11": "王貫英分館", "L13": "石牌分館",
     "K12": "天母分館",   "A13": "三民分館",   "H15": "文山分館",
@@ -132,6 +144,44 @@ def parse_nav(raw):
     sids = [b["bibId"] for b in books if b["bibId"]]
     return books, sids, total_page, token
 
+# 在瀏覽器內以 fetch 取任意頁（含館別）。
+# 來源站 WAF 會對純 HTTP 客戶端回 403、只放行真正的瀏覽器，
+# 因此所有分頁請求都必須經由 page.evaluate 發出，不能用 requests。
+EVALUATE_PAGE_JS = """
+async ([url, query, csrf, keepsite, month, pageNo, token]) => {
+  const sf = {serialNo:"1", newbookDate:month, searchField:[], searchInput:[],
+              op:[], keepsite:keepsite, cln:[], groupType:"newArrival",
+              pageNo:pageNo, limit:30, hyftdToken:token};
+  const r = await fetch(url, {
+    method:"POST",
+    headers:{"content-type":"application/json","x-csrf-token":csrf},
+    body: JSON.stringify({operationName:"newarrivals",
+                          variables:{searchForm:sf}, query:query}),
+    credentials:"include",
+  });
+  const t = await r.text();
+  if (!r.ok) return JSON.stringify({__httpError: r.status});
+  return t;
+}
+"""
+
+
+def _http_error(raw):
+    """回傳 HTTP 錯誤描述；正常回應回傳 None。
+
+    先前這類失敗被靜默忽略（只檢查長度就 continue），導致 403 被長期
+    誤判為「限流」，因此這裡明確區分並回報。
+    """
+    if isinstance(raw, str) and raw.startswith('{"__httpError"'):
+        try:
+            return f"HTTP {json.loads(raw).get('__httpError')}"
+        except Exception:
+            return "HTTP error"
+    if not raw or len(raw) < 200:
+        return "回應過短"
+    return None
+
+
 EVALUATE_JS = """
     async ([url, query, csrf, keepsite, newbookDate]) => {
         const sf = {
@@ -165,78 +215,107 @@ def scrape_month(newbookDate):
     all_books, seen_bids, bibid_to_branches = [], set(), {}
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        ctx = browser.new_context(user_agent=(
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-            "AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
-        ))
-        page = ctx.new_page()
-        captured = {"headers": {}, "query": ""}
 
-        def on_req(request):
-            if "graphql" in request.url and request.method == "POST":
-                try:
-                    body = json.loads(request.post_data or "{}")
-                    if body.get("operationName") == "newarrivals" and not captured["query"]:
-                        captured["headers"] = dict(request.headers)
-                        captured["query"]   = body.get("query", "")
-                except Exception: pass
+        def open_session():
+            """開一個新的瀏覽器 session，並取得 csrf / query / token 與 page 1。"""
+            br = p.chromium.launch(headless=True)
+            c  = br.new_context(user_agent=(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
+            ))
+            pg  = c.new_page()
+            cap = {"headers": {}, "query": ""}
 
-        page.on("request", on_req)
-        page.goto(TARGET_URL, wait_until="networkidle", timeout=60000)
-        time.sleep(5)
+            def on_req(request):
+                if "graphql" in request.url and request.method == "POST":
+                    try:
+                        body = json.loads(request.post_data or "{}")
+                        if body.get("operationName") == "newarrivals" and not cap["query"]:
+                            cap["headers"] = dict(request.headers)
+                            cap["query"]   = body.get("query", "")
+                    except Exception: pass
 
-        csrf, query_str = captured["headers"].get("x-csrf-token", ""), captured["query"]
+            pg.on("request", on_req)
+            pg.goto(TARGET_URL, wait_until="networkidle", timeout=90000)
+            time.sleep(5)
+
+            csrf_  = cap["headers"].get("x-csrf-token", "")
+            query_ = cap["query"]
+            raw    = pg.evaluate(EVALUATE_JS, [GQL_URL, query_, csrf_, [], newbookDate])
+            bks, _, tp, tok = parse_nav(raw)
+            return {"browser": br, "page": pg, "csrf": csrf_, "query": query_,
+                    "token": tok, "books1": bks, "total_page": tp}
 
         print(f"  步驟一：{label} page 1…")
-        raw_p1 = page.evaluate(EVALUATE_JS, [GQL_URL, query_str, csrf, [], newbookDate])
-        books1, _, total_page, global_token = parse_nav(raw_p1)
-        for b in books1:
+        S = open_session()
+        total_page = S["total_page"]
+        query_str  = S["query"]          # 館別階段的 fallback
+        for b in S["books1"]:
             if b["bibId"] and b["bibId"] not in seen_bids:
                 seen_bids.add(b["bibId"]); all_books.append(b)
-        print(f"    page 1: {len(books1)} 本，totalPage={total_page}")
+        print(f"    page 1: {len(S['books1'])} 本，totalPage={total_page}")
 
-        session = requests.Session()
-        skip = {"content-length", "host", "connection", "accept-encoding"}
-        for k, v in captured["headers"].items():
-            if k.lower() not in skip: session.headers[k] = v
-        for ck in ctx.cookies():
-            session.cookies.set(ck["name"], ck["value"], domain=ck.get("domain", ""))
+        rotations = 0
 
-        token = global_token
-        failed_pages = []
-        for pn in range(2, total_page + 1):
-            success = False
-            for attempt in range(3):  # 最多重試 3 次
+        def rotate(reason):
+            """關掉舊 session、開新的（已抓到的書目不受影響）。"""
+            nonlocal rotations
+            rotations += 1
+            print(f"    ↻ 換 session（第 {rotations} 次，{reason}）")
+            try: S["browser"].close()
+            except Exception: pass
+            time.sleep(SESSION_PAUSE)
+            S.update(open_session())
+
+        def fetch_page(pn, attempts=3):
+            """抓取單頁。403 代表該 session 額度用盡，直接換 session 重試。"""
+            for attempt in range(attempts):
                 try:
-                    sf = {"serialNo": "1", "newbookDate": newbookDate,
-                          "searchField": [], "searchInput": [], "op": [],
-                          "keepsite": [], "cln": [], "groupType": "newArrival",
-                          "pageNo": pn, "limit": 30, "hyftdToken": token}
-                    resp = session.post(GQL_URL,
-                        json={"operationName": "newarrivals", "variables": {"searchForm": sf}, "query": query_str},
-                        timeout=30)
-                    if len(resp.content) < 200:
-                        time.sleep(2 ** attempt)  # 指數退避
+                    raw = S["page"].evaluate(EVALUATE_PAGE_JS,
+                        [GQL_URL, S["query"], S["csrf"], [], newbookDate, pn, S["token"]])
+                    err = _http_error(raw)
+                    if err:
+                        rotate(f"page {pn} {err}")
                         continue
-                    books, _, _, new_tok = parse_nav(resp.text)
-                    if new_tok: token = new_tok
+                    books, _, _, new_tok = parse_nav(raw)
+                    if new_tok: S["token"] = new_tok
                     for b in books:
                         if b["bibId"] and b["bibId"] not in seen_bids:
                             seen_bids.add(b["bibId"]); all_books.append(b)
-                    success = True
-                    break
+                    return True
                 except Exception as e:
-                    print(f"    page {pn} attempt {attempt+1} 失敗：{e}")
-                    time.sleep(2 ** attempt)
-            if not success:
+                    print(f"    page {pn} attempt {attempt+1} 例外：{e}")
+                    time.sleep(PAGE_RETRY_BACKOFF)
+                    if attempt < attempts - 1:
+                        rotate(f"page {pn} 例外")
+            return False
+
+        failed_pages = []
+        for pn in range(2, total_page + 1):
+            # 主動輪換：在額度用盡前先換，避免撞到 403 才被動處理
+            if pn > 2 and (pn - 2) % PAGE_ROTATE == 0:
+                rotate(f"已處理 {pn - 2} 頁，預防性輪換")
+            if not fetch_page(pn):
                 failed_pages.append(pn)
-            time.sleep(0.3)
+            time.sleep(PAGE_DELAY)
+
+        # 第二輪：換新 session 後重試第一輪失敗的頁
+        if failed_pages:
+            print(f"    ⚠️  第一輪有 {len(failed_pages)} 頁失敗，換 session 後重試…")
+            rotate("第二輪重試")
+            left = []
+            for pn in failed_pages:
+                if not fetch_page(pn, attempts=2):
+                    left.append(pn)
+                time.sleep(PAGE_DELAY)
+            print(f"    第二輪救回 {len(failed_pages) - len(left)} 頁")
+            failed_pages = left
 
         if failed_pages:
-            print(f"    ⚠️  跳過失敗頁：{failed_pages}")
-        print(f"    書目共 {len(all_books)} 本")
-        browser.close()
+            print(f"    ⚠️  仍失敗 {len(failed_pages)} 頁：{failed_pages}")
+        print(f"    書目共 {len(all_books)} 本（共換 {rotations} 次 session）")
+        try: S["browser"].close()
+        except Exception: pass
 
     # 館別
     branch_items = list(BRANCH_MAP.items())
@@ -284,12 +363,6 @@ def scrape_month(newbookDate):
             time.sleep(8)
 
             csrf2, query_str2 = cap2["headers"].get("x-csrf-token", ""), cap2["query"] or query_str
-            sess2 = requests.Session()
-            skip2 = {"content-length", "host", "connection", "accept-encoding"}
-            for k, v in cap2["headers"].items():
-                if k.lower() not in skip2: sess2.headers[k] = v
-            for ck in ctx2.cookies():
-                sess2.cookies.set(ck["name"], ck["value"], domain=ck.get("domain", ""))
 
             no_token_count = 0
             for idx, (code, br_name) in enumerate(batch, batch_start + 1):
@@ -306,20 +379,19 @@ def scrape_month(newbookDate):
                 br_sids = set(sids_p1)
                 for pn in range(2, br_total + 1):
                     try:
-                        sf = {"serialNo": "1", "newbookDate": newbookDate,
-                              "searchField": [], "searchInput": [], "op": [],
-                              "keepsite": [code], "cln": [], "groupType": "newArrival",
-                              "pageNo": pn, "limit": 30, "hyftdToken": br_token}
-                        resp = sess2.post(GQL_URL,
-                            json={"operationName": "newarrivals", "variables": {"searchForm": sf}, "query": query_str2},
-                            timeout=30)
-                        if len(resp.content) < 200: time.sleep(0.5); continue
-                        _, sids_pn, _, new_br_tok = parse_nav(resp.text)
+                        raw_pn = page2.evaluate(EVALUATE_PAGE_JS,
+                            [GQL_URL, query_str2, csrf2, [code], newbookDate, pn, br_token])
+                        err = _http_error(raw_pn)
+                        if err:
+                            print(f"      [{code}] page {pn}：{err}")
+                            time.sleep(1)
+                            continue
+                        _, sids_pn, _, new_br_tok = parse_nav(raw_pn)
                         if new_br_tok: br_token = new_br_tok
                         br_sids.update(sids_pn)
                     except Exception as e:
                         print(f"      [{code}] page {pn} 失敗：{e}")
-                    time.sleep(0.15)
+                    time.sleep(0.2)
                 for sid in br_sids:
                     bibid_to_branches.setdefault(sid, []).append(code)
             browser.close()
