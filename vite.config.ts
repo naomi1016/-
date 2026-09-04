@@ -35,7 +35,9 @@ export default defineConfig(({mode}) => {
           // books.json 體積大，使用 stale-while-revalidate：先用快取，背景更新
           runtimeCaching: [
             {
-              urlPattern: /\/books\.json$/,
+              // books.json 與 descriptions.json 共用同一 cache，
+              // 「有新書目可更新」清除 books-data 時會一併失效兩者
+              urlPattern: /\/(books|descriptions)\.json$/,
               handler: 'StaleWhileRevalidate',
               options: {
                 cacheName: 'books-data',

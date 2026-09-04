@@ -23,6 +23,11 @@ export interface FilterState {
 // Service Worker 存放書目的 runtime cache 名稱（見 vite.config.ts）
 export const BOOKS_CACHE = 'books-data';
 export const BOOKS_URL   = '/books.json';
+// 書介另存一檔並以 bibId 去重（見 db.py export_to_json）：
+// books.json 約 18MB 先載入顯示書目，書介約 45MB 於背景載入後合併。
+export const DESC_URL    = '/descriptions.json';
+
+type DescEntry = { d?: string; a?: string };
 
 export function useBooks() {
   const [books, setBooks]     = useState<Book[]>([]);
@@ -30,6 +35,8 @@ export function useBooks() {
   const [error, setError]     = useState('');
   // 目前這份資料的版本識別（來自 HTTP ETag），用於比對伺服器上是否有更新
   const [etag, setEtag]       = useState<string | null>(null);
+  // 書介是否已合併完成（供 UI 判斷「搜尋書介」是否可用）
+  const [descsLoaded, setDescsLoaded] = useState(false);
 
   const loadBooks = useCallback(async (force = false) => {
     setLoading(true);
@@ -44,6 +51,7 @@ export function useBooks() {
       const data: Book[] = await res.json();
       setBooks(data.map((b, i) => ({ ...b, id: i + 1 })));
       setEtag(res.headers.get('etag'));
+      setDescsLoaded(false);
     } catch {
       setError('無法讀取 books.json，請先執行爬蟲腳本（scrape_tpml.py）產生資料檔。');
     } finally {
@@ -52,6 +60,29 @@ export function useBooks() {
   }, []);
 
   useEffect(() => { loadBooks(); }, [loadBooks]);
+
+  // 書目顯示後才在背景載入書介，避免使用者等 45MB 才看到第一本書。
+  // 失敗不影響主要功能，只是沒有書介內容。
+  useEffect(() => {
+    if (!books.length || descsLoaded) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(DESC_URL);
+        if (!res.ok) return;
+        const map: Record<string, DescEntry> = await res.json();
+        if (cancelled) return;
+        setBooks(prev => prev.map(b => {
+          const e = b.bibId ? map[b.bibId] : undefined;
+          return e ? { ...b, description: e.d ?? '', authorDesc: e.a ?? '' } : b;
+        }));
+        setDescsLoaded(true);
+      } catch {
+        // 書介載入失敗：書目仍可正常瀏覽
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [books.length, descsLoaded]);
 
   const availableLanguages = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -95,7 +126,7 @@ export function useBooks() {
   }, [books]);
 
   return {
-    books, loading, error, loadBooks, etag,
+    books, loading, error, loadBooks, etag, descsLoaded,
     availableLanguages, availableMaterialTypes, availableBranches, catCounts,
     yearBounds,
   };

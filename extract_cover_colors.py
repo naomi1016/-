@@ -19,6 +19,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 INPUT_FILE  = "public/books.json"
 OUTPUT_FILE = "public/books.json"
+EXPORT_YEAR = "2026"   # 與 update_books.py 一致
 MAX_WORKERS = 12
 TIMEOUT     = 8
 IMG_SIZE    = 60   # 縮小至 60×60 加速運算
@@ -108,18 +109,19 @@ def main():
                 print(f"  {total_done}/{len(todo)}  成功 {done}  失敗 {failed}"
                       f"  {rate:.1f} 本/秒  剩餘約 {remaining:.0f} 秒")
 
-    # 存回 JSON
-    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-        json.dump(books, f, ensure_ascii=False, separators=(",", ":"))
-
-    # 同步 coverColor 回 SQLite
+    # 先把 coverColor 同步回 SQLite，再由 db 統一匯出 JSON。
+    # 匯出邏輯只留在 db.export_to_json 一處，避免這裡漏掉書介拆檔而產生
+    # 超過 100MB 的 books.json。
     try:
         import db as book_db
         conn = book_db.get_connection()
         book_db.sync_cover_colors(conn, books)
+        exported = book_db.export_to_json(conn, OUTPUT_FILE, year=EXPORT_YEAR)
         conn.close()
+        print(f"  已匯出 {exported} 本（books.json + {book_db.DESC_FILENAME}）")
     except Exception as e:
-        print(f"  ⚠️  db 同步失敗（不影響 JSON）：{e}")
+        print(f"  ⚠️  db 同步／匯出失敗：{e}")
+        raise
 
     elapsed = time.time() - start
     has_color = sum(1 for b in books if b.get("coverColor"))

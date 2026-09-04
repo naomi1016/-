@@ -3,7 +3,7 @@
 
 所有 books 的讀寫都走這裡，public/books.json 只是給前端的匯出檔。
 """
-import json
+import json, os
 import sqlite3
 import datetime
 
@@ -161,11 +161,42 @@ def get_descriptions_by_bibid(conn):
     return result
 
 
+# 書介另存的檔名（與 books.json 同目錄）
+DESC_FILENAME = "descriptions.json"
+
+
 def export_to_json(conn, output_path, year=None):
-    """將 DB 書目匯出成 JSON，供前端使用。year 可傳入如 '2026' 只匯出該年書目。"""
+    """將 DB 書目匯出成 JSON，供前端使用。year 可傳入如 '2026' 只匯出該年書目。
+
+    書介（description / authorDesc）不放進 books.json，而是另存為
+    descriptions.json，並以 bibId 為鍵去重——同一本書出現在多個月份時
+    只存一份。前端先載入 books.json 顯示書目，再背景載入書介合併。
+
+    這麼做有兩個原因：
+      1. 書介佔原檔 87%，合併存放會讓 books.json 超過 Vercel 的 100MB 單檔上限。
+      2. 使用者不必等書介下載完才能看到書目（17MB vs 104MB）。
+    """
     books = get_all_books(conn, year=year)
+
+    descs, core = {}, []
+    for b in books:
+        bid = b.get("bibId")
+        d, a = b.get("description"), b.get("authorDesc")
+        if bid and (d or a) and bid not in descs:
+            entry = {}
+            if d: entry["d"] = d
+            if a: entry["a"] = a
+            descs[bid] = entry
+        core.append({k: v for k, v in b.items()
+                     if k not in ("description", "authorDesc")})
+
     with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(books, f, ensure_ascii=False, indent=None, separators=(",", ":"))
+        json.dump(core, f, ensure_ascii=False, indent=None, separators=(",", ":"))
+
+    desc_path = os.path.join(os.path.dirname(output_path) or ".", DESC_FILENAME)
+    with open(desc_path, "w", encoding="utf-8") as f:
+        json.dump(descs, f, ensure_ascii=False, indent=None, separators=(",", ":"))
+
     return len(books)
 
 
