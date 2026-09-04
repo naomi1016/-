@@ -99,9 +99,11 @@ def _migrate_to_composite_pk(conn):
 
 
 def get_connection(db_path=DB_PATH):
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
+    # 補抓腳本與每晚 cron 可能同時寫入，遇到鎖時等待而非直接失敗
+    conn.execute("PRAGMA busy_timeout=30000")
     _ensure_schema(conn)
     return conn
 

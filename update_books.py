@@ -393,6 +393,61 @@ def fetch_descriptions(books):
         time.sleep(0.05)
     print(f"  書介完成：{updated}/{total}")
 
+# ── 單月同步 ──────────────────────────────────────────
+
+def sync_month(conn, month_code, role="當月"):
+    """爬取單一月份並 upsert 進 DB。
+
+    upsert 只做 INSERT/UPDATE，不刪任何資料，所以中途失敗不會損毀既有書目。
+    回傳 (爬到的本數, 是否已寫入 DB)。
+    """
+    label     = month_label(month_code)
+    old_count = book_db.get_month_count(conn, label)
+
+    print(f"\n{'-'*55}")
+    print(f"[{role}] {label}（DB 現有 {old_count} 本）")
+    print(f"{'-'*55}")
+
+    fresh = scrape_month(month_code)
+    print(f"爬取完成：{len(fresh)} 本")
+
+    if not fresh:
+        print(f"⚠️  {label}：來源站無資料，跳過")
+        return 0, False
+
+    # 覆蓋保護：抓到的量明顯少於現有資料，代表這次爬取不完整，不寫入
+    if old_count > 0 and len(fresh) < old_count * 0.9:
+        print(f"⛔ {label} 跳過：新爬 {len(fresh)} 本 < 現有 {old_count} 本的 90%，疑似爬取不完整")
+        return len(fresh), False
+
+    # 從 DB 取已有書介（跨月份共用），預先填入避免重複抓取
+    existing_descs = book_db.get_descriptions_by_bibid(conn)
+    for b in fresh:
+        bid = b.get("bibId", "")
+        if bid in existing_descs:
+            if not b.get("description"):
+                b["description"] = existing_descs[bid]["description"]
+            if not b.get("authorDesc"):
+                b["authorDesc"] = existing_descs[bid]["authorDesc"]
+
+    # 只為這個月新出現、且仍無書介的書抓書介
+    existing_bids = {
+        r[0] for r in conn.execute(
+            "SELECT bibId FROM books WHERE month = ?", (label,)
+        ).fetchall()
+    }
+    added     = [b for b in fresh if b.get("bibId") and b["bibId"] not in existing_bids]
+    need_desc = [b for b in added if not b.get("description")]
+    print(f"{label} 新增書目：{len(added)} 本")
+    if need_desc:
+        fetch_descriptions(need_desc)
+
+    book_db.upsert_books(conn, fresh)
+    new_count = book_db.get_month_count(conn, label)
+    print(f"✅ {label}：{old_count} → {new_count} 本（+{new_count - old_count}）")
+    return len(fresh), True
+
+
 # ── 主程式 ────────────────────────────────────────────
 
 def main():
@@ -401,7 +456,7 @@ def main():
     print(f"北圖新書通報 — 每日增量更新  {now.strftime('%Y-%m-%d %H:%M')}")
     print(f"{'='*55}\n")
 
-    # 取當月代碼
+    # 取來源站可用月份（新到舊排序）
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
@@ -412,59 +467,37 @@ def main():
     if not months:
         print("無法取得月份清單"); return
 
-    current_month_code = months[0]
-    current_month      = month_label(current_month_code)
-    print(f"當月：{current_month}（共 {len(months)} 個月可用）\n")
+    # 當月 + 前一月份。
+    # 圖書館會回頭補登舊月份的書（編目較慢），只抓當月會永久漏掉這些書，
+    # 因此每晚多回補前一個月。
+    targets = [(months[0], "當月")]
+    if len(months) > 1:
+        targets.append((months[1], "前一月份回補"))
+
+    print("本次處理：" + "、".join(f"{month_label(c)}（{r}）" for c, r in targets))
+    print(f"（來源站共 {len(months)} 個月可用）")
 
     conn = book_db.get_connection()
     book_db.migrate_from_json(conn, OUTPUT_FILE)
-    old_current_count = book_db.get_month_count(conn, current_month)
-    print(f"現有當月資料：{old_current_count} 本\n")
 
-    # 爬當月
-    print(f"重新爬取 {current_month}…")
-    fresh_books = scrape_month(current_month_code)
-    print(f"爬取完成：{len(fresh_books)} 本\n")
+    results = []
+    for i, (code, role) in enumerate(targets):
+        if i > 0:
+            time.sleep(15)   # 月份之間稍等，降低被來源站限流的機會
+        try:
+            count, written = sync_month(conn, code, role)
+        except Exception as e:
+            print(f"❌ {month_label(code)} 發生錯誤，跳過：{e}")
+            count, written = 0, False
+        results.append((month_label(code), count, written))
 
-    # 覆蓋保護：若新爬數量比舊當月資料少超過 10%，警告並中止
-    if old_current_count > 0 and len(fresh_books) < old_current_count * 0.9:
-        print(f"⛔ 中止：新爬 {len(fresh_books)} 本 < 舊資料 {old_current_count} 本的 90%，疑似爬取不完整，保留原資料。")
-        conn.close()
-        return
-
-    # 從 DB 取已有書介（跨月份），預先填入 fresh_books
-    existing_descs = book_db.get_descriptions_by_bibid(conn)
-    for b in fresh_books:
-        bid = b.get("bibId", "")
-        if bid in existing_descs:
-            if not b.get("description"):
-                b["description"] = existing_descs[bid]["description"]
-            if not b.get("authorDesc"):
-                b["authorDesc"] = existing_descs[bid]["authorDesc"]
-
-    # 找出本月新增且無書介的書，補充書介
-    existing_bids_this_month = {
-        r[0] for r in conn.execute(
-            "SELECT bibId FROM books WHERE month = ?", (current_month,)
-        ).fetchall()
-    }
-    new_books_no_desc = [
-        b for b in fresh_books
-        if b.get("bibId") and b["bibId"] not in existing_bids_this_month
-        and not b.get("description")
-    ]
-    print(f"本月新增書目：{len([b for b in fresh_books if b.get('bibId') and b['bibId'] not in existing_bids_this_month])} 本")
-    if new_books_no_desc:
-        fetch_descriptions(new_books_no_desc)
-
-    book_db.upsert_books(conn, fresh_books)
     total = book_db.export_to_json(conn, OUTPUT_FILE, year="2026")
     conn.close()
 
-    print(f"\n✅ 更新完成：DB 共 {total} 本（含所有月份）")
-    print(f"  當月 {current_month}：{len(fresh_books)} 本")
-    has_desc = sum(1 for b in fresh_books if b.get("description"))
-    print(f"  書介覆蓋（當月）：{has_desc}/{len(fresh_books)}（{has_desc*100//len(fresh_books) if fresh_books else 0}%）")
+    print(f"\n{'='*55}")
+    print(f"✅ 更新完成：books.json 共 {total} 本（2026 年）")
+    for label, count, written in results:
+        print(f"  {label}：爬到 {count} 本　{'已寫入' if written else '未寫入（跳過）'}")
 
 if __name__ == "__main__":
     main()
